@@ -10,11 +10,12 @@
     {
       name: "list_tabs",
       description:
-        "List the user's open browser tabs and folders (tab groups), per window. Returns tabId, index, title, url, pinned, active, hidden and groupId for each tab, and the folders with groupId, title, color, collapsed.",
+        "List the user's open tabs and folders (tab groups) in the current workspace. Use only when the request is about tabs or folders. Returns tabId, index, title, url, pinned, active, hidden and groupId for each tab, and the folders with groupId, title, color, collapsed.",
       input_schema: {
         type: "object",
         properties: {
-          scope: { type: "string", enum: ["all_windows", "current_window"], description: "Default all_windows." }
+          scope: { type: "string", enum: ["current_window", "all_windows"], description: "Default current_window." },
+          include_other_workspaces: { type: "boolean", description: "Also list hidden tabs from other Zen workspaces. Default false; only when the user asks about all workspaces." }
         }
       }
     },
@@ -148,10 +149,13 @@
   /* ---------- Ausführen ---------- */
 
   async function listTabs(input) {
-    const scope = input.scope === "current_window" ? "current_window" : "all_windows";
+    const scope = input.scope === "all_windows" ? "all_windows" : "current_window";
+    const includeHidden = input.include_other_workspaces === true;
     const current = await browser.windows.getCurrent();
     let windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
     if (scope === "current_window") windows = windows.filter((window) => window.id === current.id);
+    if (!includeHidden) windows = windows.map((window) => Object.assign({}, window, { tabs: window.tabs.filter((tab) => !tab.hidden) }));
+    const usedGroupIds = new Set(windows.flatMap((window) => window.tabs.map((tab) => tab.groupId)));
     let groups = [];
     if (browser.tabGroups && typeof browser.tabGroups.query === "function") {
       try {
@@ -161,6 +165,7 @@
       }
     }
     const tabCount = windows.reduce((sum, window) => sum + window.tabs.length, 0);
+    const folderCount = groups.filter((group) => includeHidden || usedGroupIds.has(group.id)).length;
     const firstTabByUrl = new Map();
     const describeTab = (tab) => {
       const item = {
@@ -187,11 +192,11 @@
         windowId: window.id,
         isCurrent: window.id === current.id,
         folders: groups
-          .filter((group) => group.windowId === window.id)
+          .filter((group) => group.windowId === window.id && (includeHidden || usedGroupIds.has(group.id)))
           .map((group) => ({ groupId: group.id, title: group.title || "", color: group.color, collapsed: group.collapsed })),
         tabs: window.tabs.map(describeTab)
       })),
-      _label: groups.length ? L("tool.listedFolders", { count: tabCount, folders: groups.length }) : L("tool.listed", { count: tabCount })
+      _label: folderCount ? L("tool.listedFolders", { count: tabCount, folders: folderCount }) : L("tool.listed", { count: tabCount })
     };
   }
 

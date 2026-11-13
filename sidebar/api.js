@@ -14,9 +14,10 @@
     "If documents are provided, base your answer on them and say clearly when something is not in them.",
     "",
     "You have tools to see and organise the user's browser tabs:",
-    "- Call list_tabs whenever the user asks about their tabs, folders or what is open. Do not guess.",
+    "- Call list_tabs only when the request is clearly about the user's tabs or folders (sorting, tidying, finding or closing tabs, an overview of what is open). Never call it for general questions, questions about the current page or anything else; the current page is already sent along when the user includes it. Do not guess either: if the request is about tabs, look first.",
+    "- list_tabs returns the tabs of the current workspace by default. Set include_other_workspaces only when the user asks about all workspaces.",
     "- In Zen, folders are tab groups (groupId). Pinned tabs are Zen Essentials or pinned tabs: never move or group them unless the user explicitly asks.",
-    "- Tabs with hidden=true usually belong to another Zen workspace. Only touch them if the user asks for all workspaces.",
+    "- Tabs with hidden=true belong to another Zen workspace. Only touch them if the user asks for all workspaces.",
     "- To sort tabs: call list_tabs, decide on a plan, then use group_tabs, move_tabs, update_group and move_group. Prefer few, well-named folders (1-3 words) over many tiny ones.",
     "- Changes may need the user's confirmation in the UI. If a change is declined, do not retry it; ask what they want instead.",
     "- Use read_tab only when you need a page's content. After changing tabs, reply with a short summary of what changed.",
@@ -82,6 +83,7 @@
             block.text = block.text || "";
             if (block.text) this.onText(block.text);
           }
+          if (block.type === "thinking") block.thinking = block.thinking || "";
           this.blocks[event.index] = block;
           break;
         }
@@ -93,6 +95,10 @@
             this.onText(event.delta.text);
           } else if (event.delta.type === "input_json_delta") {
             this.partialJson[event.index] += event.delta.partial_json || "";
+          } else if (event.delta.type === "thinking_delta") {
+            block.thinking = (block.thinking || "") + (event.delta.thinking || "");
+          } else if (event.delta.type === "signature_delta") {
+            block.signature = (block.signature || "") + (event.delta.signature || "");
           } else if (event.delta.type === "citations_delta" && event.delta.citation) {
             (block.citations = block.citations || []).push(event.delta.citation);
           }
@@ -129,14 +135,38 @@
           if (block.citations && block.citations.length) text.citations = block.citations;
           return text;
         }
+        if (block.type === "thinking") return { type: "thinking", thinking: block.thinking || "", signature: block.signature || "" };
+        if (block.type === "redacted_thinking") return { type: "redacted_thinking", data: block.data };
         if (block.type === "tool_use" || block.type === "server_tool_use") {
           const use = { type: block.type, id: block.id, name: block.name, input: block.input };
           if (block.parseError) Object.defineProperty(use, "parseError", { value: true, enumerable: false });
           return use;
         }
         return block;
-      }).filter((block) => !(block.type === "text" && !block.text));
+      }).filter((block) => !(block.type === "text" && !block.text) && !isBrokenThinking(block));
     }
+  }
+
+  /* Ein Thinking-Block ohne Signatur oder ohne Inhalt lehnt die API ab. */
+  function isBrokenThinking(block) {
+    if (!block) return false;
+    if (block.type === "thinking") return !block.signature;
+    if (block.type === "redacted_thinking") return !block.data;
+    return false;
+  }
+
+  /* Entfernt kaputte Thinking-Blöcke, z. B. aus älteren gespeicherten Chats. */
+  function sanitizeMessages(messages) {
+    const result = [];
+    for (const message of messages || []) {
+      if (message.role !== "assistant" || !Array.isArray(message.content)) {
+        result.push(message);
+        continue;
+      }
+      const content = message.content.filter((block) => !isBrokenThinking(block));
+      if (content.length) result.push(Object.assign({}, message, { content }));
+    }
+    return result;
   }
 
   function buildHeaders(apiKey) {
@@ -165,7 +195,7 @@
 
   /* Streamt eine Antwort inkl. Tool-Aufrufen. */
   async function streamMessage({ apiKey, model, messages, tools, system, effort, maxTokens = 4096, signal, onText, onToolStart }) {
-    const body = { model, max_tokens: maxTokens, system: system || SYSTEM_PROMPT, messages, stream: true };
+    const body = { model, max_tokens: maxTokens, system: system || SYSTEM_PROMPT, messages: sanitizeMessages(messages), stream: true };
     if (tools && tools.length) body.tools = tools;
     if (effort) body.output_config = { effort };
     const response = await fetch(API_URL, { method: "POST", headers: buildHeaders(apiKey), body: JSON.stringify(body), signal });
@@ -183,6 +213,6 @@
     return { content: assembler.content(), stopReason: assembler.stopReason, usage: assembler.usage };
   }
 
-  root.ClaudeApi = { streamMessage, SseParser, MessageAssembler, SYSTEM_PROMPT };
+  root.ClaudeApi = { streamMessage, sanitizeMessages, SseParser, MessageAssembler, SYSTEM_PROMPT };
   if (typeof module !== "undefined" && module.exports) module.exports = root.ClaudeApi;
 })(typeof window !== "undefined" ? window : globalThis);
