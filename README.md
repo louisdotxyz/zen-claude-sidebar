@@ -11,6 +11,7 @@ Private Claude-Sidebar für Zen (und Firefox). Kein Server dazwischen: Anfragen 
 - **Bilder**: reinziehen, einfügen (auch Bild-Links) oder Rechtsklick auf ein Bild → „Produkt finden“. Nur Bild + Enter startet die Produktsuche. Claude erkennt das Produkt am Aussehen und sucht per Text; eine echte Rückwärts-Bildsuche ist es nicht.
 - **Rechtsklick auf markierten Text**: Erklären, Übersetzen, Umschreiben, Im Chat fragen.
 - **Tabs und Ordner**: lesen, in Ordner sortieren, umbenennen, verschieben. „Aufräumen“ schlägt zusätzlich Duplikate und lange unbenutzte Tabs zum Schliessen vor. Schliessen fragt immer nach; angepinnte Tabs werden nie geschlossen.
+- **Einstellungen**: Sprache (Deutsch/English), Aussehen, Hintergrundfarbe (folgt dem Browser-Theme oder eigene Farbe), Standard-Modell und Stufe (Niedrig/Mittel/Hoch). Änderungen speichern sich sofort.
 - **Über mich**: Text in den Einstellungen, der bei jeder Anfrage mitgeht.
 - **Verlauf**: lokal gespeichert, einzeln oder komplett löschbar. Modell im Chat umschaltbar.
 
@@ -44,6 +45,7 @@ Zum Testen ohne Installation: `about:debugging#/runtime/this-firefox` → „Tem
 ## Dateien
 - `manifest.json` – Extension-Definition
 - `sidebar/panel.*` – Oberfläche und Logik
+- `sidebar/i18n.js` – Texte in Deutsch und Englisch
 - `sidebar/api.js` – Anthropic-API mit Streaming
 - `sidebar/tabs.js` – Seiten auslesen
 - `sidebar/tools.js` – Werkzeuge für Tabs und Ordner

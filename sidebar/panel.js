@@ -1,88 +1,73 @@
 /* Claude Sidebar – Logik des Panels */
 (() => {
+  const t = I18n.t;
   const MODELS = [
     { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
     { id: "claude-opus-5-5", label: "Opus 5.5" },
     { id: "claude-haiku-5-5", label: "Haiku 5.5" }
   ];
+  const EFFORTS = [
+    { id: "", key: "settings.effortDefault" },
+    { id: "low", key: "settings.effortLow" },
+    { id: "medium", key: "settings.effortMedium" },
+    { id: "high", key: "settings.effortHigh" }
+  ];
   const MAX_CONVERSATIONS = 200;
   const MAX_TOOL_ROUNDS = 15;
-  const PROMPTS = {
-    summary: "Fasse diese Seite kurz zusammen: zuerst die Kernaussage in einem Satz, dann die wichtigsten Punkte.",
-    overview: "Gib mir eine kurze Übersicht über meine offenen Tabs und Ordner, gruppiert nach Thema.",
-    sort: "Sortiere die Tabs in meinem aktuellen Fenster nach Thema in Ordner. Bestehende Ordner kannst du weiterverwenden. Angepinnte Tabs und Essentials nicht anfassen.",
-    cleanup: "Räum meine Tabs im aktuellen Fenster auf: Schlage Duplikate und Tabs, die ich lange nicht benutzt habe, zum Schliessen vor und sortiere den Rest nach Thema in Ordner. Bestehende Ordner kannst du weiterverwenden. Angepinnte Tabs und Essentials nicht anfassen.",
-    compare: "Vergleiche die Produkte in den offenen Tabs dieses Fensters. Lies die Produktseiten, erstelle eine Vergleichstabelle mit den wichtigsten Kriterien und dem Preis und gib am Schluss eine kurze Empfehlung. Fehlende Angaben suchst du auf der Herstellerseite.",
-    find: "Finde das Produkt auf diesem Bild: Was ist es genau (Marke, Modell)? Such im Web danach und nenn mir Preis und wo ich es kaufen kann, bevorzugt bei Shops, die in die Schweiz liefern. Wenn du das genaue Modell nicht sicher erkennst, sag das und nenn die ähnlichsten Treffer."
-  };
-  /* context: "page" = aktuelle Seite erzwingen, "none" = ohne Seite. fill = nur ins Eingabefeld schreiben. */
-  const DEFAULT_COMMANDS = [
-    { name: "zusammenfassen", prompt: PROMPTS.summary, context: "page" },
-    { name: "recherche", prompt: "Recherchiere im Web und gib mir eine kurze Übersicht mit Quellen zu: ", fill: true, context: "none" },
-    { name: "vergleichen", prompt: PROMPTS.compare, context: "none" },
-    { name: "finden", prompt: PROMPTS.find },
-    { name: "aufräumen", prompt: PROMPTS.cleanup, context: "none" },
-    { name: "sortieren", prompt: PROMPTS.sort, context: "none" },
-    { name: "übersicht", prompt: PROMPTS.overview, context: "none" },
-    { name: "erklären", prompt: "Erkläre mir diese Seite einfach und kurz.", context: "page" },
-    { name: "übersetzen", prompt: "Übersetze den Hauptinhalt dieser Seite auf Deutsch.", context: "page" }
-  ];
-  const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 6 };
   const MAX_IMAGES = 4;
+  const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 6 };
+  /* context: "page" = aktuelle Seite erzwingen, "none" = ohne Seite. fill = nur ins Eingabefeld schreiben. */
+  const COMMANDS = [
+    { key: "summary", context: "page" },
+    { key: "research", fill: true, context: "none" },
+    { key: "compare", context: "none" },
+    { key: "find" },
+    { key: "cleanup", context: "none" },
+    { key: "sort", context: "none" },
+    { key: "overview", context: "none" },
+    { key: "explain", context: "page" },
+    { key: "translate", context: "page" }
+  ];
+  const SELECTION_PROMPTS = { explain: "prompt.selExplain", translate: "prompt.selTranslate", rewrite: "prompt.selRewrite" };
+  const prompt = (key) => t(`prompt.${key}`);
 
   const element = (id) => document.getElementById(id);
-  const ui = {
-    chatView: element("chatView"),
-    historyView: element("historyView"),
-    settingsView: element("settingsView"),
-    messageList: element("messageList"),
-    emptyState: element("emptyState"),
-    summarizeButton: element("summarizeButton"),
-    overviewButton: element("overviewButton"),
-    compareButton: element("compareButton"),
-    profileInput: element("profileInput"),
-    customCommandsInput: element("customCommandsInput"),
-    webSearchCheckbox: element("webSearchCheckbox"),
-    suggestBox: element("suggestBox"),
-    dropOverlay: element("dropOverlay"),
-    newChatButton: element("newChatButton"),
-    historyButton: element("historyButton"),
-    sortTabsButton: element("sortTabsButton"),
-    settingsButton: element("settingsButton"),
-    historyList: element("historyList"),
-    apiKeyInput: element("apiKeyInput"),
-    toggleKeyButton: element("toggleKeyButton"),
-    defaultModelSelect: element("defaultModelSelect"),
-    customModelInput: element("customModelInput"),
-    confirmChangesCheckbox: element("confirmChangesCheckbox"),
-    saveSettingsButton: element("saveSettingsButton"),
-    settingsSaved: element("settingsSaved"),
-    clearHistoryButton: element("clearHistoryButton"),
-    composer: element("composer"),
-    pageChip: element("pageChip"),
-    pageChipLabel: element("pageChipLabel"),
-    extraTabChips: element("extraTabChips"),
-    addTabsButton: element("addTabsButton"),
-    tabPicker: element("tabPicker"),
-    tabPickerSearch: element("tabPickerSearch"),
-    tabPickerList: element("tabPickerList"),
-    promptInput: element("promptInput"),
-    sendButton: element("sendButton"),
-    modelSelect: element("modelSelect"),
-    usageLabel: element("usageLabel")
-  };
+  const ui = {};
+  [
+    "chatView", "historyView", "settingsView", "messageList", "emptyState", "summarizeButton", "compareButton", "overviewButton",
+    "newChatButton", "historyButton", "cleanupButton", "settingsButton", "historyList",
+    "settingsSaved", "settingsNotice", "apiKeyInput", "toggleKeyButton", "defaultModelSelect", "defaultEffortSelect", "customModelInput",
+    "languageSelect", "appearanceSelect", "backgroundModeSelect", "backgroundColorInput",
+    "webSearchCheckbox", "confirmChangesCheckbox", "profileInput", "customCommandsInput", "clearHistoryButton", "versionLabel",
+    "composer", "pageChip", "pageChipLabel", "extraTabChips", "addTabsButton", "tabPicker", "tabPickerSearch", "tabPickerList",
+    "suggestBox", "dropOverlay", "promptInput", "sendButton", "modelSelect", "effortSelect", "usageLabel"
+  ].forEach((id) => (ui[id] = element(id)));
 
   const state = {
-    settings: { apiKey: "", defaultModel: MODELS[0].id, customModel: "", confirmChanges: true, webSearch: true, profile: "", customCommands: "" },
-    images: [], // { data (base64 JPEG), thumb (data-URL) }
-    selection: "",
-    lastActionTime: 0,
+    settings: {
+      apiKey: "",
+      defaultModel: MODELS[0].id,
+      customModel: "",
+      effort: "",
+      language: "auto",
+      appearance: "auto",
+      background: "auto", // "auto" oder "#rrggbb"
+      confirmChanges: true,
+      webSearch: true,
+      profile: "",
+      customCommands: ""
+    },
     conversations: [],
     currentId: null,
     currentModel: MODELS[0].id,
+    currentEffort: "",
+    effortUnsupported: new Set(), // Modelle, die keine Stufen annehmen
     includePage: true,
     activeTab: null,
     extraTabs: new Map(), // tabId -> title
+    images: [], // { data (base64 JPEG), thumb (data-URL) }
+    selection: "",
+    lastActionTime: 0,
     busy: false,
     abortController: null,
     pendingConfirm: null
@@ -125,6 +110,7 @@
     state.currentId = stored.currentId && findConversation(stored.currentId) ? stored.currentId : null;
     const current = currentConversation();
     state.currentModel = (current && current.model) || state.settings.defaultModel;
+    state.currentEffort = state.settings.effort || "";
   }
 
   async function saveConversations() {
@@ -157,7 +143,77 @@
   const partsText = (message) =>
     (message.parts || []).filter((part) => part.type === "text").map((part) => part.text).join("\n\n").trim();
 
-  /* ---------- Modelle ---------- */
+  /* ---------- Sprache und Aussehen ---------- */
+
+  function applyLanguage() {
+    I18n.setLanguage(state.settings.language);
+    I18n.apply(document);
+    fillModelSelect(ui.modelSelect, state.currentModel);
+    fillEffortSelect(ui.effortSelect, state.currentEffort);
+    ui.toggleKeyButton.textContent = t(ui.apiKeyInput.type === "password" ? "settings.show" : "settings.hide");
+    ui.clearHistoryButton.textContent = t("settings.clear");
+    setBusy(state.busy);
+    renderContextChips();
+    renderConversation();
+    if (!ui.settingsView.hidden) renderSettings();
+    if (!ui.historyView.hidden) renderHistory();
+  }
+
+  /* Wandelt eine beliebige CSS-Farbe (oder [r, g, b]) in { hex, luminance } um. */
+  function parseColor(value) {
+    if (!value) return null;
+    let red, green, blue;
+    if (Array.isArray(value)) {
+      [red, green, blue] = value;
+    } else {
+      const context = document.createElement("canvas").getContext("2d");
+      context.fillStyle = "#010203";
+      context.fillStyle = String(value);
+      const parsed = context.fillStyle;
+      if (parsed === "#010203" && String(value).replace(/\s/g, "").toLowerCase() !== "#010203") return null;
+      if (parsed.startsWith("#")) {
+        red = parseInt(parsed.slice(1, 3), 16);
+        green = parseInt(parsed.slice(3, 5), 16);
+        blue = parseInt(parsed.slice(5, 7), 16);
+      } else {
+        const numbers = parsed.match(/[\d.]+/g) || [];
+        if (numbers.length < 3 || (numbers.length > 3 && Number(numbers[3]) < 0.5)) return null; // (fast) durchsichtig: unbrauchbar
+        [red, green, blue] = numbers.map(Number);
+      }
+    }
+    if (![red, green, blue].every((channel) => Number.isFinite(channel))) return null;
+    const hex = "#" + [red, green, blue].map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("");
+    return { hex, luminance: (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255 };
+  }
+
+  async function themeBackground() {
+    if (!browser.theme || typeof browser.theme.getCurrent !== "function") return null;
+    try {
+      const theme = await browser.theme.getCurrent();
+      const colors = (theme && theme.colors) || {};
+      return parseColor(colors.sidebar) || parseColor(colors.frame) || parseColor(colors.toolbar);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /* Hintergrund aus den Einstellungen oder aus dem Browser-Theme; Hell/Dunkel richtet sich nach der Farbe. */
+  async function applyAppearance() {
+    const root = document.documentElement;
+    const custom = /^#[0-9a-f]{6}$/i.test(state.settings.background) ? parseColor(state.settings.background) : null;
+    const background = custom || (await themeBackground());
+    let scheme = state.settings.appearance;
+    if (background) {
+      root.style.setProperty("--background", background.hex);
+      if (scheme === "auto" || custom) scheme = background.luminance > 0.55 ? "light" : "dark";
+    } else {
+      root.style.removeProperty("--background");
+    }
+    if (scheme === "light" || scheme === "dark") root.dataset.scheme = scheme;
+    else delete root.dataset.scheme;
+  }
+
+  /* ---------- Modelle und Stufen ---------- */
 
   function availableModels() {
     const list = MODELS.slice();
@@ -167,15 +223,26 @@
     return list;
   }
 
-  function fillModelSelect(select, selectedId) {
+  function fillSelect(select, options, selectedId) {
     select.replaceChildren(
-      ...availableModels().map((model) => {
+      ...options.map((entry) => {
         const option = document.createElement("option");
-        option.value = model.id;
-        option.textContent = model.label;
-        option.selected = model.id === selectedId;
+        option.value = entry.id;
+        option.textContent = entry.label;
+        option.selected = entry.id === selectedId;
         return option;
       })
+    );
+  }
+
+  const fillModelSelect = (select, selectedId) => fillSelect(select, availableModels(), selectedId);
+
+  function fillEffortSelect(select, selectedId) {
+    const inComposer = select === ui.effortSelect;
+    fillSelect(
+      select,
+      EFFORTS.map((effort) => ({ id: effort.id, label: inComposer && !effort.id ? t("ui.effort") : t(effort.key) })),
+      selectedId
     );
   }
 
@@ -184,9 +251,19 @@
   function showView(name) {
     for (const view of ["chatView", "historyView", "settingsView"]) ui[view].hidden = view !== name;
     ui.composer.hidden = name !== "chatView";
+    ui.historyButton.classList.toggle("is-active", name === "historyView");
+    ui.settingsButton.classList.toggle("is-active", name === "settingsView");
     closeTabPicker();
+    hideSuggest();
     if (name === "historyView") renderHistory();
     if (name === "settingsView") renderSettings();
+  }
+
+  function needApiKey() {
+    showView("settingsView");
+    ui.settingsNotice.textContent = t("error.needKey");
+    ui.settingsNotice.hidden = false;
+    ui.apiKeyInput.focus();
   }
 
   /* ---------- Chat rendern ---------- */
@@ -220,7 +297,7 @@
       if (message.contexts && message.contexts.length) {
         const context = document.createElement("div");
         context.className = "message-context";
-        context.textContent = "mit " + message.contexts.map((item) => item.title).join(", ");
+        context.textContent = t("msg.with", { list: message.contexts.map((item) => item.title).join(", ") });
         wrapper.appendChild(context);
       }
       return wrapper;
@@ -232,7 +309,7 @@
     actions.className = "message-actions";
     const copyButton = document.createElement("button");
     copyButton.className = "text-button";
-    copyButton.textContent = "Kopieren";
+    copyButton.textContent = t("msg.copy");
     copyButton.addEventListener("click", () => copyText(partsText(message), copyButton));
     actions.appendChild(copyButton);
     wrapper.appendChild(actions);
@@ -245,7 +322,7 @@
     card.className = "confirm-card";
     const title = document.createElement("div");
     title.className = "confirm-card-title";
-    title.textContent = "Claude möchte deine Tabs ändern:";
+    title.textContent = t("confirm.title");
     const list = document.createElement("ul");
     for (const item of part.items) {
       const entry = document.createElement("li");
@@ -268,21 +345,42 @@
       row.className = "button-row";
       const accept = document.createElement("button");
       accept.className = "primary-button";
-      accept.textContent = "Ausführen";
+      accept.textContent = t("confirm.run");
       accept.addEventListener("click", () => resolveConfirm(true));
       const decline = document.createElement("button");
-      decline.className = "ghost-button";
-      decline.textContent = "Ablehnen";
+      decline.className = "soft-button";
+      decline.textContent = t("confirm.decline");
       decline.addEventListener("click", () => resolveConfirm(false));
       row.append(accept, decline);
       card.appendChild(row);
     } else {
       const status = document.createElement("div");
       status.className = "confirm-state";
-      status.textContent = part.state === "accepted" ? "Ausgeführt" : "Abgelehnt";
+      status.textContent = t(part.state === "accepted" ? "confirm.done" : "confirm.declined");
       card.appendChild(status);
     }
     return card;
+  }
+
+  function buildSources(part) {
+    const box = document.createElement("div");
+    box.className = "sources";
+    box.textContent = t("msg.sources");
+    const list = document.createElement("ol");
+    part.items.forEach((item) => {
+      if (!/^https?:\/\//.test(item.url)) return;
+      const entry = document.createElement("li");
+      const link = document.createElement("a");
+      link.href = item.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = item.title || item.url;
+      link.title = item.url;
+      entry.appendChild(link);
+      list.appendChild(entry);
+    });
+    box.appendChild(list);
+    return box;
   }
 
   function updateAssistantElement(wrapper, message) {
@@ -304,24 +402,7 @@
       } else if (part.type === "confirm") {
         body.appendChild(buildConfirmCard(part));
       } else if (part.type === "sources") {
-        const box = document.createElement("div");
-        box.className = "sources";
-        box.textContent = "Quellen";
-        const list = document.createElement("ol");
-        part.items.forEach((item) => {
-          if (!/^https?:\/\//.test(item.url)) return;
-          const entry = document.createElement("li");
-          const link = document.createElement("a");
-          link.href = item.url;
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          link.textContent = item.title || item.url;
-          link.title = item.url;
-          entry.appendChild(link);
-          list.appendChild(entry);
-        });
-        box.appendChild(list);
-        body.appendChild(box);
+        body.appendChild(buildSources(part));
       }
     });
     if (message.streaming && (!parts.length || parts[parts.length - 1].type !== "text")) {
@@ -357,12 +438,11 @@
       document.execCommand("copy");
       helper.remove();
     }
-    const original = button.textContent;
-    button.textContent = "Kopiert";
-    setTimeout(() => (button.textContent = original), 1200);
+    button.textContent = t("msg.copied");
+    setTimeout(() => (button.textContent = t("msg.copy")), 1200);
   }
 
-  /* ---------- Kontext: aktuelle Seite und weitere Tabs ---------- */
+  /* ---------- Kontext: aktuelle Seite, weitere Tabs, Bilder, Auswahl ---------- */
 
   async function refreshActiveTab() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
@@ -370,69 +450,59 @@
     renderContextChips();
   }
 
+  function buildChip(className, title, children, onClick) {
+    const chip = document.createElement("button");
+    chip.className = className;
+    chip.title = title;
+    const remove = document.createElement("span");
+    remove.className = "chip-remove";
+    remove.textContent = "×";
+    chip.append(...children, remove);
+    chip.addEventListener("click", onClick);
+    return chip;
+  }
+
+  function chipLabel(text) {
+    const label = document.createElement("span");
+    label.className = "chip-label";
+    label.textContent = text;
+    return label;
+  }
+
   function renderContextChips() {
     const tab = state.activeTab;
     const readable = tab && TabTools.isReadableUrl(tab.url);
     ui.pageChip.setAttribute("aria-pressed", String(state.includePage && Boolean(readable)));
     ui.pageChip.disabled = !readable;
-    ui.pageChipLabel.textContent = readable ? tab.title || "Diese Seite" : "Diese Seite (nicht lesbar)";
-    ui.pageChip.title = readable ? `Aktuelle Seite mitschicken: ${tab.url}` : "Interne Seiten kann die Extension nicht lesen";
+    ui.pageChipLabel.textContent = readable ? tab.title || t("chip.thisPage") : t("chip.unreadable");
+    ui.pageChip.title = readable ? t("chip.pageTitle", { url: tab.url }) : t("chip.unreadableTitle");
 
-    ui.extraTabChips.replaceChildren(
-      ...[...state.extraTabs.entries()].map(([tabId, title]) => {
-        const chip = document.createElement("button");
-        chip.className = "chip chip-tab";
-        chip.title = "Entfernen";
-        const label = document.createElement("span");
-        label.className = "chip-label";
-        label.textContent = title;
-        const remove = document.createElement("span");
-        remove.className = "chip-remove";
-        remove.textContent = "×";
-        chip.append(label, remove);
-        chip.addEventListener("click", () => {
-          state.extraTabs.delete(tabId);
-          renderContextChips();
-        });
-        return chip;
+    const chips = [...state.extraTabs.entries()].map(([tabId, title]) =>
+      buildChip("chip chip-tab", t("chip.remove"), [chipLabel(title)], () => {
+        state.extraTabs.delete(tabId);
+        renderContextChips();
       })
     );
-
     state.images.forEach((image, index) => {
-      const chip = document.createElement("button");
-      chip.className = "chip chip-tab chip-image";
-      chip.title = "Bild entfernen";
       const preview = document.createElement("img");
       preview.src = image.thumb;
       preview.alt = "";
-      const remove = document.createElement("span");
-      remove.className = "chip-remove";
-      remove.textContent = "×";
-      chip.append(preview, remove);
-      chip.addEventListener("click", () => {
-        state.images.splice(index, 1);
-        renderContextChips();
-      });
-      ui.extraTabChips.appendChild(chip);
+      chips.push(
+        buildChip("chip chip-tab chip-image", t("chip.removeImage"), [preview], () => {
+          state.images.splice(index, 1);
+          renderContextChips();
+        })
+      );
     });
-
     if (state.selection) {
-      const chip = document.createElement("button");
-      chip.className = "chip chip-tab";
-      chip.title = state.selection.slice(0, 300);
-      const label = document.createElement("span");
-      label.className = "chip-label";
-      label.textContent = `Auswahl (${state.selection.length} Zeichen)`;
-      const remove = document.createElement("span");
-      remove.className = "chip-remove";
-      remove.textContent = "×";
-      chip.append(label, remove);
-      chip.addEventListener("click", () => {
-        state.selection = "";
-        renderContextChips();
-      });
-      ui.extraTabChips.appendChild(chip);
+      chips.push(
+        buildChip("chip chip-tab", state.selection.slice(0, 300), [chipLabel(t("chip.selection", { count: state.selection.length }))], () => {
+          state.selection = "";
+          renderContextChips();
+        })
+      );
     }
+    ui.extraTabChips.replaceChildren(...chips);
   }
 
   async function openTabPicker() {
@@ -469,8 +539,8 @@
     if (!candidates.length) {
       const empty = document.createElement("li");
       empty.className = "hint";
-      empty.style.padding = "6px";
-      empty.textContent = "Keine weiteren lesbaren Tabs in diesem Fenster.";
+      empty.style.padding = "8px";
+      empty.textContent = t("picker.empty");
       ui.tabPickerList.appendChild(empty);
     }
     ui.tabPickerSearch.value = "";
@@ -488,7 +558,7 @@
     const tabsToRead = [];
 
     const activeReadable = state.activeTab && TabTools.isReadableUrl(state.activeTab.url);
-    if (forcePage && !activeReadable) throw new Error("Diese Seite kann nicht gelesen werden (interne Seite).");
+    if (forcePage && !activeReadable) throw new Error(t("error.pageUnreadable"));
     if (!noPage && activeReadable && (state.includePage || forcePage) && !alreadySent.has(state.activeTab.url)) {
       tabsToRead.push(state.activeTab);
     }
@@ -522,27 +592,31 @@
 
   /* ---------- Senden mit Werkzeug-Schleife ---------- */
 
-  const RUNNING_LABELS = {
-    list_tabs: "Lese Tabs und Ordner …",
-    read_tab: "Lese Seite …",
-    focus_tab: "Wechsle Tab …",
-    move_tabs: "Plane Verschiebung …",
-    group_tabs: "Plane Ordner …",
-    ungroup_tabs: "Plane Änderung …",
-    update_group: "Plane Ordner-Änderung …",
-    move_group: "Plane Verschiebung …",
-    close_tabs: "Plane Aufräumen …",
-    web_search: "Suche im Web …"
-  };
-
   function buildTools() {
     return state.settings.webSearch === false ? BrowserTools.definitions : BrowserTools.definitions.concat([WEB_SEARCH_TOOL]);
   }
 
   function buildSystemPrompt() {
+    const languageName = I18n.language === "de" ? "German" : "English";
+    let system = `${ClaudeApi.SYSTEM_PROMPT}\n\nThe interface language is ${languageName}. Use it when the user's own language is unclear and for short notes about tab actions.`;
     const profile = (state.settings.profile || "").trim();
-    if (!profile) return ClaudeApi.SYSTEM_PROMPT;
-    return `${ClaudeApi.SYSTEM_PROMPT}\n\nThe user wrote this about themselves and how they want answers. Follow it where it applies:\n<user_profile>\n${profile.slice(0, 6000)}\n</user_profile>`;
+    if (profile) {
+      system += `\n\nThe user wrote this about themselves and how they want answers. Follow it where it applies:\n<user_profile>\n${profile.slice(0, 6000)}\n</user_profile>`;
+    }
+    return system;
+  }
+
+  /* Ruft die API auf. Lehnt das Modell die Stufe ab, wird einmal ohne Stufe wiederholt und das Modell gemerkt. */
+  async function callApi(parameters) {
+    const effort = state.currentEffort && !state.effortUnsupported.has(state.currentModel) ? state.currentEffort : "";
+    try {
+      return await ClaudeApi.streamMessage(Object.assign({}, parameters, { effort }));
+    } catch (error) {
+      if (!effort || error.status !== 400 || !/effort|output_config/i.test(error.detail || error.message || "")) throw error;
+      state.effortUnsupported.add(state.currentModel);
+      flash(t("flash.effortUnsupported"));
+      return ClaudeApi.streamMessage(Object.assign({}, parameters, { effort: "" }));
+    }
   }
 
   /* Websuche läuft bei Anthropic: Schritte beschriften und Quellen einsammeln. */
@@ -552,13 +626,13 @@
         const step = parts.find((part) => part.type === "tool" && part.id === block.id);
         if (step) {
           step.status = "done";
-          step.label = `Websuche: ${(block.input && block.input.query) || ""}`;
+          step.label = t("step.webSearch", { query: (block.input && block.input.query) || "" });
         }
       } else if (block.type === "web_search_tool_result" && block.content && !Array.isArray(block.content)) {
         const step = parts.find((part) => part.type === "tool" && part.id === block.tool_use_id);
         if (step) {
           step.status = "error";
-          step.label = "Websuche fehlgeschlagen";
+          step.label = t("step.webSearchFailed");
         }
       } else if (block.type === "text" && block.citations) {
         for (const citation of block.citations) {
@@ -577,7 +651,7 @@
     const sources = new Map();
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       let textPart = null;
-      const result = await ClaudeApi.streamMessage({
+      const result = await callApi({
         apiKey: state.settings.apiKey,
         model: state.currentModel,
         messages: conversation.apiMessages,
@@ -594,7 +668,7 @@
         },
         onToolStart: (block) => {
           textPart = null;
-          parts.push({ type: "tool", id: block.id, name: block.name, label: RUNNING_LABELS[block.name] || block.name, status: "running" });
+          parts.push({ type: "tool", id: block.id, name: block.name, label: t(`step.${block.name}`), status: "running" });
           render();
         }
       });
@@ -603,7 +677,7 @@
 
       if (result.content.length) conversation.apiMessages.push({ role: "assistant", content: result.content });
       noteServerTools(result.content, parts, sources);
-      if (result.stopReason === "max_tokens") parts.push({ type: "text", text: "*[Antwort wegen Längenlimit abgeschnitten]*" });
+      if (result.stopReason === "max_tokens") parts.push({ type: "text", text: t("note.truncated") });
       if (result.stopReason === "pause_turn" && result.content.length) continue;
       if (result.stopReason !== "tool_use") {
         addSources(parts, sources);
@@ -633,12 +707,12 @@
         }
         if (state.abortController.signal.aborted || (BrowserTools.isWrite(block.name) && !approved)) {
           step.status = "error";
-          step.label = state.abortController.signal.aborted ? "Gestoppt" : "Abgelehnt";
+          step.label = t(state.abortController.signal.aborted ? "step.stopped" : "confirm.declined");
           toolResults.push({ type: "tool_result", tool_use_id: block.id, content: "The user declined this change.", is_error: true });
           continue;
         }
         const outcome = block.parseError
-          ? { content: "Invalid tool input JSON.", label: "Fehler: ungültige Eingabe", isError: true }
+          ? { content: "Invalid tool input JSON.", label: t("step.invalid"), isError: true }
           : await BrowserTools.execute(block.name, block.input);
         step.status = outcome.isError ? "error" : "done";
         step.label = outcome.label;
@@ -648,18 +722,16 @@
         render();
       }
       conversation.apiMessages.push({ role: "user", content: toolResults });
-      if (state.abortController.signal.aborted) throw new DOMException("Gestoppt", "AbortError");
+      if (state.abortController.signal.aborted) throw new DOMException("stopped", "AbortError");
     }
-    parts.push({ type: "text", text: "*[Zu viele Schritte, abgebrochen. Sag mir, wie ich weitermachen soll.]*" });
+    parts.push({ type: "text", text: t("note.tooManySteps") });
   }
 
   async function sendMessage(userText, options = {}) {
     const text = (userText || "").trim();
     if (!text || state.busy) return;
     if (!state.settings.apiKey) {
-      showView("settingsView");
-      ui.settingsSaved.textContent = "Bitte zuerst einen API-Key eintragen.";
-      ui.apiKeyInput.focus();
+      needApiKey();
       return;
     }
 
@@ -676,7 +748,7 @@
 
     let conversation = currentConversation();
     if (!conversation) {
-      const title = pages[0] && options.forcePage ? `Zusammenfassung: ${pages[0].title}` : text;
+      const title = pages[0] && options.forcePage ? t("history.summaryTitle", { title: pages[0].title }) : text;
       conversation = createConversation(title);
     }
     conversation.model = state.currentModel;
@@ -690,7 +762,7 @@
       renderContextChips();
     }
     const contexts = pages.map((page) => ({ title: page.title, url: page.url }));
-    if (selection) contexts.push({ title: "Auswahl" });
+    if (selection) contexts.push({ title: t("msg.selection") });
     const userMessage = { role: "user", text, contexts };
     if (images.length) userMessage.images = images.map((image) => image.thumb);
     const assistantMessage = { role: "assistant", parts: [], streaming: true };
@@ -705,7 +777,7 @@
 
     if (contextError) {
       delete assistantMessage.streaming;
-      assistantMessage.error = `${contextError} Schalte „Diese Seite“ aus oder entferne den Tab und versuch es nochmal.`;
+      assistantMessage.error = t("error.context", { error: contextError });
       updateAssistantElement(assistantElement, assistantMessage);
       await saveConversations();
       setBusy(false);
@@ -744,20 +816,18 @@
         } else if (nothingCompleted) {
           conversation.apiMessages.length = snapshotLength;
         }
-        assistantMessage.parts.push({ type: "text", text: "*[gestoppt]*" });
+        assistantMessage.parts.push({ type: "text", text: t("note.stopped") });
       } else {
         if (nothingCompleted) conversation.apiMessages.length = snapshotLength;
-        assistantMessage.error = error.message || "Unbekannter Fehler.";
-        if (/web_search/i.test(assistantMessage.error)) {
-          assistantMessage.error += " Die Websuche ist für deinen API-Account evtl. nicht freigeschaltet: in der Anthropic Console aktivieren oder hier in den Einstellungen ausschalten.";
-        }
+        assistantMessage.error = error.message || t("error.unknown");
+        if (/web_search/i.test(assistantMessage.error)) assistantMessage.error += ` ${t("error.webSearch")}`;
       }
     } finally {
       resolveConfirm(false);
       delete assistantMessage.streaming;
       state.abortController = null;
       conversation.updatedAt = Date.now();
-      ui.usageLabel.textContent = `${formatNumber(usage.inputTokens)} in · ${formatNumber(usage.outputTokens)} out`;
+      ui.usageLabel.textContent = t("usage", { in: formatNumber(usage.inputTokens), out: formatNumber(usage.outputTokens) });
       updateAssistantElement(assistantElement, assistantMessage);
       scrollToBottom(false);
       await saveConversations();
@@ -768,13 +838,12 @@
   function setBusy(busy) {
     state.busy = busy;
     ui.sendButton.classList.toggle("is-busy", busy);
-    ui.sendButton.title = busy ? "Stoppen" : "Senden (Enter)";
-    ui.summarizeButton.disabled = busy;
-    ui.overviewButton.disabled = busy;
-    ui.compareButton.disabled = busy;
+    ui.sendButton.title = t(busy ? "input.stop" : "input.send");
+    ui.sendButton.setAttribute("aria-label", ui.sendButton.title);
+    for (const button of [ui.summarizeButton, ui.overviewButton, ui.compareButton, ui.cleanupButton]) button.disabled = busy;
   }
 
-  const formatNumber = (value) => new Intl.NumberFormat("de-CH").format(value || 0);
+  const formatNumber = (value) => new Intl.NumberFormat(I18n.language === "de" ? "de-CH" : "en").format(value || 0);
 
   function autoGrow() {
     ui.promptInput.style.height = "auto";
@@ -785,7 +854,9 @@
     if (state.busy) return;
     state.currentId = null;
     state.currentModel = state.settings.defaultModel;
+    state.currentEffort = state.settings.effort || "";
     fillModelSelect(ui.modelSelect, state.currentModel);
+    fillEffortSelect(ui.effortSelect, state.currentEffort);
     state.extraTabs.clear();
     state.images = [];
     state.selection = "";
@@ -805,11 +876,11 @@
     if (!sorted.length) {
       const empty = document.createElement("li");
       empty.className = "hint";
-      empty.textContent = "Noch keine Chats.";
+      empty.textContent = t("history.empty");
       ui.historyList.replaceChildren(empty);
       return;
     }
-    const dateFormat = new Intl.DateTimeFormat("de-CH", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+    const dateFormat = new Intl.DateTimeFormat(I18n.language === "de" ? "de-CH" : "en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
     ui.historyList.replaceChildren(
       ...sorted.map((conversation) => {
         const item = document.createElement("li");
@@ -818,7 +889,7 @@
         open.className = "history-open";
         const title = document.createElement("span");
         title.className = "history-title";
-        title.textContent = conversation.title || "Ohne Titel";
+        title.textContent = conversation.title || t("history.untitled");
         const date = document.createElement("span");
         date.className = "history-date";
         date.textContent = dateFormat.format(conversation.updatedAt);
@@ -835,7 +906,7 @@
         });
         const remove = document.createElement("button");
         remove.className = "icon-button history-delete";
-        remove.title = "Chat löschen";
+        remove.title = t("history.delete");
         remove.textContent = "×";
         remove.addEventListener("click", async () => {
           if (state.busy && state.currentId === conversation.id) return;
@@ -851,28 +922,69 @@
     );
   }
 
-  /* ---------- Einstellungen ---------- */
+  /* ---------- Einstellungen (speichern sich bei jeder Änderung selbst) ---------- */
 
   function renderSettings() {
-    ui.apiKeyInput.value = state.settings.apiKey || "";
-    ui.apiKeyInput.type = "password";
-    ui.toggleKeyButton.textContent = "Zeigen";
-    ui.customModelInput.value = state.settings.customModel || "";
-    ui.confirmChangesCheckbox.checked = state.settings.confirmChanges !== false;
-    ui.webSearchCheckbox.checked = state.settings.webSearch !== false;
-    ui.profileInput.value = state.settings.profile || "";
-    ui.customCommandsInput.value = state.settings.customCommands || "";
-    fillModelSelect(ui.defaultModelSelect, state.settings.defaultModel);
+    const settings = state.settings;
+    ui.settingsNotice.hidden = Boolean(settings.apiKey) || !ui.settingsNotice.textContent;
+    ui.apiKeyInput.value = settings.apiKey || "";
+    ui.customModelInput.value = settings.customModel || "";
+    fillModelSelect(ui.defaultModelSelect, settings.defaultModel);
+    fillEffortSelect(ui.defaultEffortSelect, settings.effort || "");
+    ui.languageSelect.value = ["de", "en"].includes(settings.language) ? settings.language : "auto";
+    ui.appearanceSelect.value = ["light", "dark"].includes(settings.appearance) ? settings.appearance : "auto";
+    const customBackground = /^#[0-9a-f]{6}$/i.test(settings.background);
+    ui.backgroundModeSelect.value = customBackground ? "custom" : "auto";
+    ui.backgroundColorInput.hidden = !customBackground;
+    if (customBackground) ui.backgroundColorInput.value = settings.background;
+    ui.confirmChangesCheckbox.checked = settings.confirmChanges !== false;
+    ui.webSearchCheckbox.checked = settings.webSearch !== false;
+    ui.profileInput.value = settings.profile || "";
+    ui.customCommandsInput.value = settings.customCommands || "";
+    ui.versionLabel.textContent = `Claude Sidebar ${browser.runtime && browser.runtime.getManifest ? browser.runtime.getManifest().version : ""}`;
+  }
+
+  let savedTimer = null;
+  async function saveSettingsFromForm() {
+    const settings = state.settings;
+    const before = { language: settings.language, appearance: settings.appearance, background: settings.background };
+    settings.apiKey = ui.apiKeyInput.value.trim();
+    settings.customModel = ui.customModelInput.value.trim();
+    settings.defaultModel = ui.defaultModelSelect.value || settings.defaultModel;
+    settings.effort = ui.defaultEffortSelect.value;
+    settings.language = ui.languageSelect.value;
+    settings.appearance = ui.appearanceSelect.value;
+    ui.backgroundColorInput.hidden = ui.backgroundModeSelect.value !== "custom";
+    settings.background = ui.backgroundModeSelect.value === "custom" ? ui.backgroundColorInput.value : "auto";
+    settings.confirmChanges = ui.confirmChangesCheckbox.checked;
+    settings.webSearch = ui.webSearchCheckbox.checked;
+    settings.profile = ui.profileInput.value.trim();
+    settings.customCommands = ui.customCommandsInput.value.trim();
+    await saveSettings();
+
+    if (!currentConversation()) state.currentModel = settings.defaultModel;
+    state.currentEffort = settings.effort;
+    if (settings.apiKey) ui.settingsNotice.hidden = true;
+    if (before.appearance !== settings.appearance || before.background !== settings.background) await applyAppearance();
+    if (before.language !== settings.language) applyLanguage();
+    else {
+      fillModelSelect(ui.modelSelect, state.currentModel);
+      fillModelSelect(ui.defaultModelSelect, settings.defaultModel);
+      fillEffortSelect(ui.effortSelect, state.currentEffort);
+    }
+    ui.settingsSaved.textContent = t("settings.saved");
+    clearTimeout(savedTimer);
+    savedTimer = setTimeout(() => (ui.settingsSaved.textContent = ""), 1500);
   }
 
   let clearConfirmTimer = null;
   async function handleClearHistory() {
     if (state.busy) return;
     if (!clearConfirmTimer) {
-      ui.clearHistoryButton.textContent = "Wirklich alles löschen? Nochmal klicken";
+      ui.clearHistoryButton.textContent = t("settings.clearConfirm");
       clearConfirmTimer = setTimeout(() => {
         clearConfirmTimer = null;
-        ui.clearHistoryButton.textContent = "Ganzen Verlauf löschen";
+        ui.clearHistoryButton.textContent = t("settings.clear");
       }, 3000);
       return;
     }
@@ -881,8 +993,8 @@
     state.conversations = [];
     state.currentId = null;
     await saveConversations();
-    ui.clearHistoryButton.textContent = "Verlauf gelöscht";
-    setTimeout(() => (ui.clearHistoryButton.textContent = "Ganzen Verlauf löschen"), 1500);
+    ui.clearHistoryButton.textContent = t("settings.cleared");
+    setTimeout(() => (ui.clearHistoryButton.textContent = t("settings.clear")), 1500);
     renderConversation();
   }
 
@@ -899,7 +1011,8 @@
       })
       .filter(Boolean);
     const customNames = new Set(custom.map((command) => command.name));
-    return custom.concat(DEFAULT_COMMANDS.filter((command) => !customNames.has(command.name)));
+    const builtIn = COMMANDS.map((command) => Object.assign({}, command, { name: t(`command.${command.key}`), prompt: prompt(command.key) }));
+    return custom.concat(builtIn.filter((command) => !customNames.has(command.name)));
   }
 
   function runCommand(command, extra) {
@@ -1018,7 +1131,7 @@
   async function loadBitmap(source) {
     if (typeof source !== "string") return createImageBitmap(source);
     /* Pinterest liefert in Übersichten nur kleine Vorschauen: zuerst die grössere Version probieren. */
-    const candidates = /\/\/i\.pinimg\.com\/(\d+x\d*|\d+x)\//.test(source)
+    const candidates = /\/\/i\.pinimg\.com\/\d+x\d*\//.test(source)
       ? [source.replace(/(\/\/i\.pinimg\.com\/)[^/]+\//, "$1736x/"), source]
       : [source];
     let lastError = null;
@@ -1037,7 +1150,7 @@
   /* Nimmt eine Datei oder eine Bild-URL, verkleinert sie und hängt sie an die nächste Nachricht. */
   async function addImage(source) {
     if (state.images.length >= MAX_IMAGES) {
-      flash(`Maximal ${MAX_IMAGES} Bilder pro Nachricht.`);
+      flash(t("flash.maxImages", { count: MAX_IMAGES }));
       return false;
     }
     try {
@@ -1073,7 +1186,7 @@
     if (!files.length && !isImageLink) return;
     event.preventDefault();
     for (const source of files.length ? files : [text]) {
-      if (!(await addImage(source))) flash("Bild konnte nicht geladen werden.");
+      if (!(await addImage(source))) flash(t("flash.imageFailed"));
     }
   }
 
@@ -1087,17 +1200,17 @@
     showView("chatView");
     if (action.imageUrl) {
       if (!(await addImage(action.imageUrl))) {
-        flash("Bild konnte nicht geladen werden.");
+        flash(t("flash.imageFailed"));
         return;
       }
-      if (action.prompt === "find") sendMessage(PROMPTS.find);
+      if (action.kind === "find") sendMessage(prompt("find"));
       else ui.promptInput.focus();
       return;
     }
     if (!action.text) return;
     state.selection = action.text;
     renderContextChips();
-    if (action.prompt) sendMessage(action.prompt, { noPage: true });
+    if (SELECTION_PROMPTS[action.kind]) sendMessage(t(SELECTION_PROMPTS[action.kind]), { noPage: true });
     else ui.promptInput.focus();
   }
 
@@ -1107,15 +1220,15 @@
     ui.newChatButton.addEventListener("click", startNewChat);
     ui.historyButton.addEventListener("click", () => showView(ui.historyView.hidden ? "historyView" : "chatView"));
     ui.settingsButton.addEventListener("click", () => showView(ui.settingsView.hidden ? "settingsView" : "chatView"));
-    ui.sortTabsButton.addEventListener("click", () => {
+    ui.cleanupButton.addEventListener("click", () => {
       showView("chatView");
-      sendMessage(PROMPTS.cleanup, { noPage: true });
+      sendMessage(prompt("cleanup"), { noPage: true });
     });
-    ui.compareButton.addEventListener("click", () => sendMessage(PROMPTS.compare, { noPage: true }));
     document.querySelectorAll("[data-close-view]").forEach((button) => button.addEventListener("click", () => showView("chatView")));
 
-    ui.summarizeButton.addEventListener("click", () => sendMessage(PROMPTS.summary, { forcePage: true }));
-    ui.overviewButton.addEventListener("click", () => sendMessage(PROMPTS.overview, { noPage: true }));
+    ui.summarizeButton.addEventListener("click", () => sendMessage(prompt("summary"), { forcePage: true }));
+    ui.overviewButton.addEventListener("click", () => sendMessage(prompt("overview"), { noPage: true }));
+    ui.compareButton.addEventListener("click", () => sendMessage(prompt("compare"), { noPage: true }));
 
     ui.pageChip.addEventListener("click", () => {
       state.includePage = !state.includePage;
@@ -1179,28 +1292,23 @@
     ui.modelSelect.addEventListener("change", () => {
       state.currentModel = ui.modelSelect.value;
     });
+    ui.effortSelect.addEventListener("change", () => {
+      state.currentEffort = ui.effortSelect.value;
+    });
 
+    /* Einstellungen */
     ui.toggleKeyButton.addEventListener("click", (event) => {
       event.preventDefault();
       const hidden = ui.apiKeyInput.type === "password";
       ui.apiKeyInput.type = hidden ? "text" : "password";
-      ui.toggleKeyButton.textContent = hidden ? "Verbergen" : "Zeigen";
+      ui.toggleKeyButton.textContent = t(hidden ? "settings.hide" : "settings.show");
     });
-    ui.saveSettingsButton.addEventListener("click", async () => {
-      state.settings.apiKey = ui.apiKeyInput.value.trim();
-      state.settings.customModel = ui.customModelInput.value.trim();
-      state.settings.confirmChanges = ui.confirmChangesCheckbox.checked;
-      state.settings.webSearch = ui.webSearchCheckbox.checked;
-      state.settings.profile = ui.profileInput.value.trim();
-      state.settings.customCommands = ui.customCommandsInput.value.trim();
-      state.settings.defaultModel = ui.defaultModelSelect.value;
-      await saveSettings();
-      if (!currentConversation()) state.currentModel = state.settings.defaultModel;
-      fillModelSelect(ui.modelSelect, state.currentModel);
-      fillModelSelect(ui.defaultModelSelect, state.settings.defaultModel);
-      ui.settingsSaved.textContent = "Gespeichert.";
-      setTimeout(() => (ui.settingsSaved.textContent = ""), 2000);
-    });
+    for (const control of [
+      ui.apiKeyInput, ui.customModelInput, ui.defaultModelSelect, ui.defaultEffortSelect, ui.languageSelect, ui.appearanceSelect,
+      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.confirmChangesCheckbox, ui.profileInput, ui.customCommandsInput
+    ]) {
+      control.addEventListener("change", saveSettingsFromForm);
+    }
     ui.clearHistoryButton.addEventListener("click", handleClearHistory);
 
     browser.tabs.onActivated.addListener(refreshActiveTab);
@@ -1217,6 +1325,8 @@
       if (state.extraTabs.delete(tabId)) renderContextChips();
     });
     browser.windows.onFocusChanged.addListener(refreshActiveTab);
+    if (browser.theme && browser.theme.onUpdated) browser.theme.onUpdated.addListener(applyAppearance);
+    if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyAppearance);
 
     /* Bilder reinziehen */
     let dragDepth = 0;
@@ -1236,18 +1346,22 @@
     document.addEventListener("dragover", (event) => {
       if (isUsefulDrag(event)) event.preventDefault();
     });
-    document.addEventListener("drop", async (event) => {
-      dragDepth = 0;
-      ui.dropOverlay.hidden = true;
-      if (!isUsefulDrag(event)) return;
-      event.preventDefault();
-      if (ui.composer.hidden) return;
-      const dropped = imageSourcesFromTransfer(event.dataTransfer);
-      let added = 0;
-      for (const source of dropped) if (await addImage(source)) added++;
-      if (!added) flash("Kein Bild erkannt.");
-      ui.promptInput.focus();
-    }, true);
+    document.addEventListener(
+      "drop",
+      async (event) => {
+        dragDepth = 0;
+        ui.dropOverlay.hidden = true;
+        if (!isUsefulDrag(event)) return;
+        event.preventDefault();
+        if (ui.composer.hidden) return;
+        const dropped = imageSourcesFromTransfer(event.dataTransfer);
+        let added = 0;
+        for (const source of dropped) if (await addImage(source)) added++;
+        if (!added) flash(t("flash.noImage"));
+        ui.promptInput.focus();
+      },
+      true
+    );
 
     browser.storage.onChanged.addListener((changes, area) => {
       if (area === "local" && changes.pendingAction && changes.pendingAction.newValue) handlePendingAction(changes.pendingAction.newValue);
@@ -1262,7 +1376,7 @@
     autoGrow();
     hideSuggest();
     if (!text) {
-      sendMessage(PROMPTS.find); // nur ein Bild: Produkt suchen
+      sendMessage(prompt("find")); // nur ein Bild: Produkt suchen
       return;
     }
     const match = text.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);
@@ -1275,13 +1389,13 @@
 
   async function init() {
     await loadState();
-    fillModelSelect(ui.modelSelect, state.currentModel);
+    await applyAppearance();
     bindEvents();
+    applyLanguage();
     await refreshActiveTab();
-    renderConversation();
     if (!state.settings.apiKey) {
+      ui.settingsNotice.textContent = t("error.welcome");
       showView("settingsView");
-      ui.settingsSaved.textContent = "Willkommen! Trag deinen Anthropic API-Key ein.";
     } else {
       ui.promptInput.focus();
       const { pendingAction } = await browser.storage.local.get("pendingAction");

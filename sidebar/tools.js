@@ -1,6 +1,8 @@
 /* Werkzeuge, mit denen Claude Tabs und Ordner (Tab-Gruppen) lesen und ordnen kann.
    Nichts wird geschlossen oder gelöscht. Ändernde Werkzeuge laufen über eine Bestätigung im Panel. */
 (function (root) {
+  const L = (key, values) => (root.I18n ? root.I18n.t(key, values) : key);
+  const nTabs = (count) => (root.I18n ? root.I18n.tabCount(count) : `${count} Tabs`);
   const GROUP_COLORS = ["grey", "blue", "purple", "cyan", "green", "yellow", "orange", "red", "pink"];
   const READ_TAB_MAX_CHARS = 30000;
 
@@ -189,7 +191,7 @@
           .map((group) => ({ groupId: group.id, title: group.title || "", color: group.color, collapsed: group.collapsed })),
         tabs: window.tabs.map(describeTab)
       })),
-      _label: `${tabCount} Tabs gelesen${groups.length ? `, ${groups.length} Ordner` : ""}`
+      _label: groups.length ? L("tool.listedFolders", { count: tabCount, folders: groups.length }) : L("tool.listed", { count: tabCount })
     };
   }
 
@@ -201,7 +203,7 @@
       title: page.title,
       url: page.url,
       text: page.text.slice(0, READ_TAB_MAX_CHARS) + (truncated ? "\n[… gekürzt]" : ""),
-      _label: `Seite gelesen: ${tab.title || tab.url}`
+      _label: L("tool.read", { title: tab.title || tab.url })
     };
   }
 
@@ -209,7 +211,7 @@
     const [tab] = await requireTabs([input.tabId]);
     await browser.tabs.update(tab.id, { active: true });
     await browser.windows.update(tab.windowId, { focused: true });
-    return { ok: true, _label: `Tab geöffnet: ${tab.title || tab.url}` };
+    return { ok: true, _label: L("tool.focused", { title: tab.title || tab.url }) };
   }
 
   async function moveTabs(input) {
@@ -217,7 +219,7 @@
     const options = { index: Number.isInteger(input.index) ? input.index : -1 };
     if (Number.isInteger(input.windowId)) options.windowId = input.windowId;
     await browser.tabs.move(tabs.map((tab) => tab.id), options);
-    return { ok: true, _label: `${tabs.length} ${tabs.length === 1 ? "Tab" : "Tabs"} verschoben` };
+    return { ok: true, _label: L("tool.moved", { tabs: nTabs(tabs.length) }) };
   }
 
   async function groupTabs(input) {
@@ -235,8 +237,8 @@
       ok: true,
       groupId,
       _label: options.groupId !== undefined
-        ? `${tabs.length} Tabs in Ordner „${group.title || groupId}“`
-        : `Ordner „${group.title || "ohne Namen"}“ mit ${tabs.length} Tabs erstellt`
+        ? L("tool.grouped", { count: tabs.length, title: group.title || groupId })
+        : L("tool.groupCreated", { count: tabs.length, title: group.title || L("tool.unnamed") })
     };
   }
 
@@ -244,7 +246,7 @@
     if (typeof browser.tabs.ungroup !== "function") throw new Error("Ordner werden von diesem Browser nicht unterstützt.");
     const tabs = await requireTabs(input.tabIds);
     await browser.tabs.ungroup(tabs.map((tab) => tab.id));
-    return { ok: true, _label: `${tabs.length} Tabs aus Ordnern gelöst` };
+    return { ok: true, _label: L("tool.ungrouped", { count: tabs.length }) };
   }
 
   async function updateGroup(input) {
@@ -254,13 +256,13 @@
     if (GROUP_COLORS.includes(input.color)) update.color = input.color;
     if (typeof input.collapsed === "boolean") update.collapsed = input.collapsed;
     await browser.tabGroups.update(group.id, update);
-    return { ok: true, _label: `Ordner „${update.title || group.title || group.id}“ angepasst` };
+    return { ok: true, _label: L("tool.groupUpdated", { title: update.title || group.title || group.id }) };
   }
 
   async function moveGroup(input) {
     const group = await getGroup(input.groupId);
     await browser.tabGroups.move(group.id, { index: Number.isInteger(input.index) ? input.index : -1 });
-    return { ok: true, _label: `Ordner „${group.title || group.id}“ verschoben` };
+    return { ok: true, _label: L("tool.groupMoved", { title: group.title || group.id }) };
   }
 
   async function closeTabs(input) {
@@ -270,7 +272,7 @@
       throw new Error(`Angepinnte Tabs/Essentials werden nicht geschlossen: ${pinned.map((tab) => tab.id).join(", ")}. Lass sie weg.`);
     }
     await browser.tabs.remove(tabs.map((tab) => tab.id));
-    return { ok: true, closed: tabs.length, _label: `${tabs.length} ${tabs.length === 1 ? "Tab" : "Tabs"} geschlossen` };
+    return { ok: true, closed: tabs.length, _label: L("tool.closed", { tabs: nTabs(tabs.length) }) };
   }
 
   const HANDLERS = {
@@ -288,14 +290,14 @@
   /* Führt ein Werkzeug aus. Gibt { content (für die API), label (für die Anzeige), isError } zurück. */
   async function execute(name, input) {
     const handler = HANDLERS[name];
-    if (!handler) return { content: `Unbekanntes Werkzeug: ${name}`, label: `Unbekanntes Werkzeug ${name}`, isError: true };
+    if (!handler) return { content: `Unbekanntes Werkzeug: ${name}`, label: L("tool.unknown", { name }), isError: true };
     try {
       const result = await handler(input || {});
       const label = result._label;
       delete result._label;
       return { content: JSON.stringify(result), label, isError: false };
     } catch (error) {
-      return { content: error.message || String(error), label: `Fehler: ${error.message || error}`, isError: true };
+      return { content: error.message || String(error), label: L("tool.error", { error: error.message || error }), isError: true };
     }
   }
 
@@ -305,7 +307,7 @@
     const titleOf = async (tabId) => {
       try {
         const tab = await browser.tabs.get(Number(tabId));
-        return `${tab.title || tab.url}${tab.pinned ? " (angepinnt)" : ""}`;
+        return `${tab.title || tab.url}${tab.pinned ? L("tool.pinned") : ""}`;
       } catch (_) {
         return `Tab ${tabId}`;
       }
@@ -313,39 +315,39 @@
     const groupTitleOf = async (groupId) => {
       try {
         const group = await getGroup(groupId);
-        return group.title || `Ordner ${groupId}`;
+        return group.title || L("tool.folder", { id: groupId });
       } catch (_) {
-        return `Ordner ${groupId}`;
+        return L("tool.folder", { id: groupId });
       }
     };
     const tabIds = Array.isArray(input.tabIds) ? input.tabIds : [];
     const details = [];
     const shown = name === "close_tabs" ? 40 : 8;
     for (const id of tabIds.slice(0, shown)) details.push(await titleOf(id));
-    if (tabIds.length > shown) details.push(`… und ${tabIds.length - shown} weitere`);
-    const count = `${tabIds.length} ${tabIds.length === 1 ? "Tab" : "Tabs"}`;
-    const position = input.index === -1 ? "ans Ende" : `an Position ${input.index}`;
+    if (tabIds.length > shown) details.push(L("tool.more", { count: tabIds.length - shown }));
+    const count = nTabs(tabIds.length);
+    const position = input.index === -1 ? L("tool.toEnd") : L("tool.toPosition", { index: input.index });
 
     switch (name) {
       case "move_tabs":
-        return { title: `${count} ${position} verschieben`, details };
+        return { title: L("plan.move", { tabs: count, position }), details };
       case "group_tabs":
         return Number.isInteger(input.groupId)
-          ? { title: `${count} in Ordner „${await groupTitleOf(input.groupId)}“`, details }
-          : { title: `Neuer Ordner „${input.title || "ohne Namen"}“ mit ${count}`, details };
+          ? { title: L("plan.group", { tabs: count, title: await groupTitleOf(input.groupId) }), details }
+          : { title: L("plan.newGroup", { tabs: count, title: input.title || L("tool.unnamed") }), details };
       case "close_tabs":
-        return { title: `${count} schliessen`, details };
+        return { title: L("plan.close", { tabs: count }), details };
       case "ungroup_tabs":
-        return { title: `${count} aus Ordnern lösen`, details };
+        return { title: L("plan.ungroup", { tabs: count }), details };
       case "update_group": {
         const changes = [];
-        if (typeof input.title === "string") changes.push(`umbenennen in „${input.title}“`);
-        if (input.color) changes.push(`Farbe ${input.color}`);
-        if (typeof input.collapsed === "boolean") changes.push(input.collapsed ? "zuklappen" : "aufklappen");
-        return { title: `Ordner „${await groupTitleOf(input.groupId)}“: ${changes.join(", ") || "anpassen"}`, details: [] };
+        if (typeof input.title === "string") changes.push(L("plan.rename", { title: input.title }));
+        if (input.color) changes.push(L("plan.color", { color: input.color }));
+        if (typeof input.collapsed === "boolean") changes.push(L(input.collapsed ? "plan.collapse" : "plan.expand"));
+        return { title: L("plan.updateGroup", { title: await groupTitleOf(input.groupId), changes: changes.join(", ") || L("plan.adjust") }), details: [] };
       }
       case "move_group":
-        return { title: `Ordner „${await groupTitleOf(input.groupId)}“ ${position} verschieben`, details: [] };
+        return { title: L("plan.moveGroup", { title: await groupTitleOf(input.groupId), position }), details: [] };
       default:
         return { title: name, details: [] };
     }

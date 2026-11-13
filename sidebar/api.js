@@ -2,6 +2,7 @@
 (function (root) {
   const API_URL = "https://api.anthropic.com/v1/messages";
   const API_VERSION = "2023-06-01";
+  const L = (key) => (root.I18n ? root.I18n.t(key) : key);
 
   const SYSTEM_PROMPT = [
     "You are Claude, running in a private sidebar of the user's Zen browser (a Firefox fork).",
@@ -115,7 +116,7 @@
           if (event.delta && event.delta.stop_reason) this.stopReason = event.delta.stop_reason;
           break;
         case "error":
-          throw new Error((event.error && event.error.message) || "Fehler im Stream");
+          throw new Error((event.error && event.error.message) || L("api.stream"));
         default:
           break;
       }
@@ -155,20 +156,18 @@
     } catch (_) {
       /* kein JSON */
     }
-    const hints = {
-      401: "API-Key ungültig. Prüf ihn in den Einstellungen.",
-      403: "Kein Zugriff mit diesem API-Key.",
-      404: "Modell nicht gefunden. Prüf die Modell-ID in den Einstellungen.",
-      429: "Rate-Limit erreicht. Kurz warten und nochmal versuchen.",
-      529: "Anthropic ist gerade überlastet. Gleich nochmal versuchen."
-    };
-    return new Error([hints[response.status], detail || `HTTP ${response.status}`].filter(Boolean).join(" "));
+    const hint = [401, 403, 404, 429, 529].includes(response.status) ? L(`api.${response.status}`) : "";
+    const error = new Error([hint, detail || `HTTP ${response.status}`].filter(Boolean).join(" "));
+    error.status = response.status;
+    error.detail = detail;
+    return error;
   }
 
   /* Streamt eine Antwort inkl. Tool-Aufrufen. */
-  async function streamMessage({ apiKey, model, messages, tools, system, maxTokens = 4096, signal, onText, onToolStart }) {
+  async function streamMessage({ apiKey, model, messages, tools, system, effort, maxTokens = 4096, signal, onText, onToolStart }) {
     const body = { model, max_tokens: maxTokens, system: system || SYSTEM_PROMPT, messages, stream: true };
     if (tools && tools.length) body.tools = tools;
+    if (effort) body.output_config = { effort };
     const response = await fetch(API_URL, { method: "POST", headers: buildHeaders(apiKey), body: JSON.stringify(body), signal });
     if (!response.ok) throw await readError(response);
 

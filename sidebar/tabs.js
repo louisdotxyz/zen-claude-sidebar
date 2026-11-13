@@ -18,20 +18,22 @@
     };
   }
 
+  const L = (key, values) => (root.I18n ? root.I18n.t(key, values) : key);
+
   function isReadableUrl(url) {
     return /^(https?|file):/i.test(url || "");
   }
 
   async function extractTab(tab) {
     if (!isReadableUrl(tab.url)) {
-      throw new Error(`„${tab.title || tab.url}“ kann nicht gelesen werden (interne Seite).`);
+      throw new Error(L("error.tabInternal", { title: tab.title || tab.url }));
     }
     try {
       const [result] = await browser.tabs.executeScript(tab.id, { code: `(${pageExtractor.toString()})()` });
       if (!result || !result.text) throw new Error("leer");
       return result;
     } catch (error) {
-      throw new Error(`„${tab.title || tab.url}“ konnte nicht gelesen werden. Evtl. ist der Tab entladen oder die Seite blockiert Extensions.`);
+      throw new Error(L("error.tabUnreadable", { title: tab.title || tab.url }));
     }
   }
 

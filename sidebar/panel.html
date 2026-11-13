@@ -8,16 +8,18 @@
 </head>
 <body>
   <header class="topbar">
-    <button class="icon-button" id="newChatButton" title="Neuer Chat" aria-label="Neuer Chat">
-      <svg viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg>
+    <button class="icon-button" id="newChatButton" data-i18n-title="ui.newChat">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
     </button>
-    <button class="icon-button" id="historyButton" title="Verlauf" aria-label="Verlauf">
-      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/><path d="M10 6.5V10l2.5 1.5"/></svg>
+    <button class="icon-button" id="historyButton" data-i18n-title="ui.history">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>
     </button>
     <div class="topbar-spacer"></div>
-    <button class="text-button" id="sortTabsButton" title="Duplikate und alte Tabs schliessen, Rest in Ordner sortieren">Aufräumen</button>
-    <button class="icon-button" id="settingsButton" title="Einstellungen" aria-label="Einstellungen">
-      <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="2.5"/><path d="M10 2.5v2M10 15.5v2M2.5 10h2M15.5 10h2M4.7 4.7l1.4 1.4M13.9 13.9l1.4 1.4M4.7 15.3l1.4-1.4M13.9 6.1l1.4-1.4"/></svg>
+    <button class="icon-button" id="cleanupButton" data-i18n-title="ui.cleanup">
+      <svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
+    </button>
+    <button class="icon-button" id="settingsButton" data-i18n-title="ui.settings">
+      <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
   </header>
 
@@ -25,19 +27,21 @@
   <main class="view" id="chatView">
     <div class="messages" id="messageList"></div>
     <div class="empty-state" id="emptyState">
-      <p class="empty-title">Was soll ich tun?</p>
-      <button class="ghost-button" id="summarizeButton">Seite zusammenfassen</button>
-      <button class="ghost-button" id="compareButton">Produkte in Tabs vergleichen</button>
-      <button class="ghost-button" id="overviewButton">Was habe ich offen?</button>
-      <p class="hint empty-hint"><kbd>/</kbd> Befehle · <kbd>@</kbd> Tab dazunehmen · Bild reinziehen, um ein Produkt zu finden</p>
+      <p class="empty-title" data-i18n="empty.title"></p>
+      <button class="soft-button" id="summarizeButton" data-i18n="empty.summarize"></button>
+      <button class="soft-button" id="compareButton" data-i18n="empty.compare"></button>
+      <button class="soft-button" id="overviewButton" data-i18n="empty.overview"></button>
+      <p class="hint empty-hint">
+        <kbd>/</kbd> <span data-i18n="empty.hintCommands"></span> · <kbd>@</kbd> <span data-i18n="empty.hintTabs"></span> · <span data-i18n="empty.hintImage"></span>
+      </p>
     </div>
   </main>
 
   <!-- Verlauf -->
   <section class="view" id="historyView" hidden>
     <div class="view-header">
-      <h2>Verlauf</h2>
-      <button class="text-button" data-close-view>Schliessen</button>
+      <h2 data-i18n="ui.history"></h2>
+      <button class="text-button" data-close-view data-i18n="ui.close"></button>
     </div>
     <ul class="history-list" id="historyList"></ul>
   </section>
@@ -45,80 +49,134 @@
   <!-- Einstellungen -->
   <section class="view" id="settingsView" hidden>
     <div class="view-header">
-      <h2>Einstellungen</h2>
-      <button class="text-button" data-close-view>Schliessen</button>
-    </div>
-    <label class="field">
-      <span>Anthropic API-Key</span>
-      <div class="key-row">
-        <input type="password" id="apiKeyInput" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
-        <button class="text-button" id="toggleKeyButton">Zeigen</button>
-      </div>
-      <small>Bleibt lokal im Browser. Neuen Key erstellen: <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></small>
-    </label>
-    <label class="field">
-      <span>Standard-Modell</span>
-      <select id="defaultModelSelect"></select>
-    </label>
-    <label class="field">
-      <span>Eigene Modell-ID (optional)</span>
-      <input type="text" id="customModelInput" placeholder="z.B. claude-sonnet-5-5" spellcheck="false">
-      <small>Erscheint zusätzlich in der Modellauswahl.</small>
-    </label>
-    <label class="field">
-      <span>Über mich</span>
-      <textarea id="profileInput" rows="5" placeholder="Wer du bist, wie Claude antworten soll, welche Shops du bevorzugst …"></textarea>
-      <small>Geht bei jeder Anfrage mit.</small>
-    </label>
-    <label class="field">
-      <span>Eigene Befehle</span>
-      <textarea id="customCommandsInput" rows="4" spellcheck="false" placeholder="quellen: Liste alle Quellen dieser Seite im APA-Stil auf.&#10;kritik: Was sind die Schwächen dieses Textes?"></textarea>
-      <small>Eine Zeile pro Befehl: <code>name: Prompt</code>. Aufruf mit <code>/name</code>.</small>
-    </label>
-    <label class="checkbox-row field-checkbox">
-      <input type="checkbox" id="webSearchCheckbox"> Websuche erlauben (kostet pro Suche extra)
-    </label>
-    <label class="checkbox-row field-checkbox">
-      <input type="checkbox" id="confirmChangesCheckbox"> Tab-Änderungen vor dem Ausführen bestätigen
-    </label>
-    <small class="hint">Tabs schliessen fragt immer nach.</small>
-    <div class="button-row">
-      <button class="primary-button" id="saveSettingsButton">Speichern</button>
+      <h2 data-i18n="ui.settings"></h2>
       <span class="hint" id="settingsSaved"></span>
+      <button class="text-button" data-close-view data-i18n="ui.close"></button>
     </div>
-    <hr>
-    <p class="hint">Chats werden nur lokal in deinem Browser-Profil gespeichert. Seiteninhalte und Bilder gehen nur an Anthropic, und nur wenn du sie mitschickst.</p>
-    <button class="danger-button" id="clearHistoryButton">Ganzen Verlauf löschen</button>
+    <p class="notice" id="settingsNotice" hidden></p>
+
+    <h3 data-i18n="settings.modelSection"></h3>
+    <div class="group">
+      <label class="field">
+        <span data-i18n="settings.apiKey"></span>
+        <div class="key-row">
+          <input type="password" id="apiKeyInput" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+          <button class="text-button" id="toggleKeyButton" type="button"></button>
+        </div>
+        <small><span data-i18n="settings.keyHint"></span> <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></small>
+      </label>
+      <label class="row">
+        <span data-i18n="settings.defaultModel"></span>
+        <select id="defaultModelSelect"></select>
+      </label>
+      <label class="row">
+        <span data-i18n="settings.effort"></span>
+        <select id="defaultEffortSelect"></select>
+      </label>
+      <small class="hint" data-i18n="settings.effortHint"></small>
+      <label class="field">
+        <span data-i18n="settings.customModel"></span>
+        <input type="text" id="customModelInput" placeholder="claude-…" spellcheck="false">
+        <small data-i18n="settings.customModelHint"></small>
+      </label>
+    </div>
+
+    <h3 data-i18n="settings.general"></h3>
+    <div class="group">
+      <label class="row">
+        <span data-i18n="settings.language"></span>
+        <select id="languageSelect">
+          <option value="auto" data-i18n="settings.auto"></option>
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+        </select>
+      </label>
+      <label class="row">
+        <span data-i18n="settings.appearance"></span>
+        <select id="appearanceSelect">
+          <option value="auto" data-i18n="settings.auto"></option>
+          <option value="light" data-i18n="settings.light"></option>
+          <option value="dark" data-i18n="settings.dark"></option>
+        </select>
+      </label>
+      <label class="row">
+        <span data-i18n="settings.background"></span>
+        <span class="row-controls">
+          <input type="color" id="backgroundColorInput" value="#1b1b1d" hidden>
+          <select id="backgroundModeSelect">
+            <option value="auto" data-i18n="settings.bgAuto"></option>
+            <option value="custom" data-i18n="settings.bgCustom"></option>
+          </select>
+        </span>
+      </label>
+      <small class="hint" data-i18n="settings.bgHint"></small>
+    </div>
+
+    <h3 data-i18n="settings.behaviour"></h3>
+    <div class="group">
+      <label class="row">
+        <span data-i18n="settings.webSearch"></span>
+        <input type="checkbox" class="switch" id="webSearchCheckbox">
+      </label>
+      <label class="row">
+        <span data-i18n="settings.confirm"></span>
+        <input type="checkbox" class="switch" id="confirmChangesCheckbox">
+      </label>
+      <small class="hint" data-i18n="settings.closeAlways"></small>
+    </div>
+
+    <h3 data-i18n="settings.personal"></h3>
+    <div class="group">
+      <label class="field">
+        <span data-i18n="settings.aboutMe"></span>
+        <textarea id="profileInput" rows="5" data-i18n-placeholder="settings.aboutMePlaceholder"></textarea>
+        <small data-i18n="settings.aboutMeHint"></small>
+      </label>
+      <label class="field">
+        <span data-i18n="settings.commands"></span>
+        <textarea id="customCommandsInput" rows="4" spellcheck="false" data-i18n-placeholder="settings.commandsPlaceholder"></textarea>
+        <small data-i18n="settings.commandsHint"></small>
+      </label>
+    </div>
+
+    <h3 data-i18n="settings.data"></h3>
+    <div class="group">
+      <p class="hint" data-i18n="settings.privacy"></p>
+      <button class="danger-button" id="clearHistoryButton" type="button"></button>
+    </div>
+    <p class="hint version" id="versionLabel"></p>
   </section>
 
   <!-- Eingabe -->
   <footer class="composer" id="composer">
     <div class="context-row" id="contextRow">
-      <button class="chip chip-toggle" id="pageChip" aria-pressed="true" title="Aktuelle Seite als Kontext mitschicken">
-        <span class="chip-dot"></span><span class="chip-label" id="pageChipLabel">Diese Seite</span>
+      <button class="chip chip-toggle" id="pageChip" aria-pressed="true">
+        <span class="chip-dot"></span><span class="chip-label" id="pageChipLabel"></span>
       </button>
       <span id="extraTabChips"></span>
-      <button class="chip chip-add" id="addTabsButton" title="Weitere Tabs als Kontext hinzufügen">+ Tabs</button>
+      <button class="chip chip-add" id="addTabsButton" data-i18n="chip.addTabs" data-i18n-title="chip.addTabsTitle"></button>
     </div>
     <div class="tab-picker" id="tabPicker" hidden>
-      <input type="search" id="tabPickerSearch" placeholder="Tabs filtern…">
+      <input type="search" id="tabPickerSearch" data-i18n-placeholder="picker.filter">
       <ul id="tabPickerList"></ul>
     </div>
     <ul class="suggest-box" id="suggestBox" hidden></ul>
     <div class="input-box">
-      <textarea id="promptInput" rows="1" placeholder="Frag Claude…  / für Befehle"></textarea>
-      <button class="send-button" id="sendButton" title="Senden (Enter)" aria-label="Senden">
-        <svg viewBox="0 0 20 20" class="icon-send"><path d="M10 15V5M5.5 9.5 10 5l4.5 4.5"/></svg>
-        <svg viewBox="0 0 20 20" class="icon-stop"><rect x="6" y="6" width="8" height="8" rx="1.5"/></svg>
+      <textarea id="promptInput" rows="1" data-i18n-placeholder="input.placeholder"></textarea>
+      <button class="send-button" id="sendButton">
+        <svg viewBox="0 0 24 24" class="icon-send"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+        <svg viewBox="0 0 24 24" class="icon-stop"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
       </button>
     </div>
     <div class="composer-meta">
-      <select id="modelSelect" title="Modell"></select>
+      <select id="modelSelect" data-i18n-title="ui.model"></select>
+      <select id="effortSelect" data-i18n-title="ui.effort"></select>
       <span class="usage" id="usageLabel"></span>
     </div>
   </footer>
-  <div class="drop-overlay" id="dropOverlay" hidden>Bild hier ablegen</div>
+  <div class="drop-overlay" id="dropOverlay" data-i18n="drop.here" hidden></div>
 
+  <script src="i18n.js"></script>
   <script src="markdown.js"></script>
   <script src="api.js"></script>
   <script src="tabs.js"></script>

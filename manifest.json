@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Claude Sidebar",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Private Claude-Sidebar für Zen/Firefox: Recherche mit Websuche, Produktvergleiche, Bilder, Tabs und Ordner aufräumen. Eigener API-Key, Verlauf nur lokal.",
   "browser_specific_settings": {
     "gecko": {
@@ -20,6 +20,7 @@
     "tabs",
     "tabGroups",
     "menus",
+    "theme",
     "storage",
     "unlimitedStorage",
     "<all_urls>"
@@ -30,6 +31,7 @@
   },
   "background": {
     "scripts": [
+      "sidebar/i18n.js",
       "background.js"
     ]
   },
