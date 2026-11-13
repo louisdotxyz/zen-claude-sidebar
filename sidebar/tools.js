@@ -1,0 +1,363 @@
+/* Werkzeuge, mit denen Claude Tabs und Ordner (Tab-Gruppen) lesen und ordnen kann.
+   Nichts wird geschlossen oder gelöscht. Ändernde Werkzeuge laufen über eine Bestätigung im Panel. */
+(function (root) {
+  const GROUP_COLORS = ["grey", "blue", "purple", "cyan", "green", "yellow", "orange", "red", "pink"];
+  const READ_TAB_MAX_CHARS = 30000;
+
+  const DEFINITIONS = [
+    {
+      name: "list_tabs",
+      description:
+        "List the user's open browser tabs and folders (tab groups), per window. Returns tabId, index, title, url, pinned, active, hidden and groupId for each tab, and the folders with groupId, title, color, collapsed.",
+      input_schema: {
+        type: "object",
+        properties: {
+          scope: { type: "string", enum: ["all_windows", "current_window"], description: "Default all_windows." }
+        }
+      }
+    },
+    {
+      name: "read_tab",
+      description: "Read the visible text content of one tab. Use only when you need the page content.",
+      input_schema: {
+        type: "object",
+        properties: { tabId: { type: "integer" } },
+        required: ["tabId"]
+      }
+    },
+    {
+      name: "focus_tab",
+      description: "Switch to a tab so the user sees it.",
+      input_schema: {
+        type: "object",
+        properties: { tabId: { type: "integer" } },
+        required: ["tabId"]
+      }
+    },
+    {
+      name: "move_tabs",
+      description:
+        "Move tabs to a position. The tabs are placed in the given order starting at index (-1 = end of the window). Optionally into another window.",
+      input_schema: {
+        type: "object",
+        properties: {
+          tabIds: { type: "array", items: { type: "integer" }, minItems: 1 },
+          index: { type: "integer" },
+          windowId: { type: "integer" }
+        },
+        required: ["tabIds", "index"]
+      }
+    },
+    {
+      name: "group_tabs",
+      description:
+        "Put tabs into a folder (tab group). Without groupId a new folder is created; give it a short title. With groupId the tabs are added to that existing folder.",
+      input_schema: {
+        type: "object",
+        properties: {
+          tabIds: { type: "array", items: { type: "integer" }, minItems: 1 },
+          groupId: { type: "integer" },
+          title: { type: "string" },
+          color: { type: "string", enum: GROUP_COLORS }
+        },
+        required: ["tabIds"]
+      }
+    },
+    {
+      name: "ungroup_tabs",
+      description: "Take tabs out of their folders. The tabs stay open.",
+      input_schema: {
+        type: "object",
+        properties: { tabIds: { type: "array", items: { type: "integer" }, minItems: 1 } },
+        required: ["tabIds"]
+      }
+    },
+    {
+      name: "update_group",
+      description: "Rename a folder, change its color, or collapse/expand it.",
+      input_schema: {
+        type: "object",
+        properties: {
+          groupId: { type: "integer" },
+          title: { type: "string" },
+          color: { type: "string", enum: GROUP_COLORS },
+          collapsed: { type: "boolean" }
+        },
+        required: ["groupId"]
+      }
+    },
+    {
+      name: "close_tabs",
+      description:
+        "Close tabs. The user is always asked to confirm first. Only for cleanups the user asked for (duplicates, stale tabs). Pinned tabs are refused.",
+      input_schema: {
+        type: "object",
+        properties: { tabIds: { type: "array", items: { type: "integer" }, minItems: 1 } },
+        required: ["tabIds"]
+      }
+    },
+    {
+      name: "move_group",
+      description: "Move a whole folder to a position in its window (-1 = end).",
+      input_schema: {
+        type: "object",
+        properties: { groupId: { type: "integer" }, index: { type: "integer" } },
+        required: ["groupId", "index"]
+      }
+    }
+  ];
+
+  const WRITE_TOOLS = new Set(["move_tabs", "group_tabs", "ungroup_tabs", "update_group", "move_group", "close_tabs"]);
+  const ALWAYS_CONFIRM = new Set(["close_tabs"]);
+  const foldersSupported = () => typeof browser.tabs.group === "function" && Boolean(browser.tabGroups);
+
+  function shortUrl(url) {
+    try {
+      const parsed = new URL(url);
+      if (!/^https?:$/.test(parsed.protocol)) return url.slice(0, 80);
+      return (parsed.hostname + parsed.pathname).slice(0, 120);
+    } catch (_) {
+      return String(url || "").slice(0, 80);
+    }
+  }
+
+  const ungroupedId = (groupId) => (typeof groupId === "number" && groupId >= 0 ? groupId : null);
+
+  async function requireTabs(tabIds) {
+    if (!Array.isArray(tabIds) || !tabIds.length) throw new Error("tabIds fehlt.");
+    const tabs = [];
+    const missing = [];
+    for (const id of tabIds) {
+      try {
+        tabs.push(await browser.tabs.get(Number(id)));
+      } catch (_) {
+        missing.push(id);
+      }
+    }
+    if (missing.length) throw new Error(`Diese Tabs gibt es nicht (mehr): ${missing.join(", ")}. Ruf list_tabs erneut auf.`);
+    return tabs;
+  }
+
+  async function getGroup(groupId) {
+    if (!browser.tabGroups) throw new Error("Ordner werden von diesem Browser nicht unterstützt.");
+    return browser.tabGroups.get(Number(groupId));
+  }
+
+  /* ---------- Ausführen ---------- */
+
+  async function listTabs(input) {
+    const scope = input.scope === "current_window" ? "current_window" : "all_windows";
+    const current = await browser.windows.getCurrent();
+    let windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+    if (scope === "current_window") windows = windows.filter((window) => window.id === current.id);
+    let groups = [];
+    if (browser.tabGroups && typeof browser.tabGroups.query === "function") {
+      try {
+        groups = await browser.tabGroups.query({});
+      } catch (_) {
+        groups = [];
+      }
+    }
+    const tabCount = windows.reduce((sum, window) => sum + window.tabs.length, 0);
+    const firstTabByUrl = new Map();
+    const describeTab = (tab) => {
+      const item = {
+        tabId: tab.id,
+        index: tab.index,
+        title: (tab.title || "").slice(0, 120),
+        url: shortUrl(tab.url),
+        pinned: tab.pinned,
+        active: tab.active,
+        hidden: Boolean(tab.hidden),
+        groupId: ungroupedId(tab.groupId)
+      };
+      if (typeof tab.lastAccessed === "number") item.daysSinceUsed = Math.max(0, Math.floor((Date.now() - tab.lastAccessed) / 86400000));
+      if (/^https?:/i.test(tab.url || "")) {
+        if (firstTabByUrl.has(tab.url)) item.duplicateOf = firstTabByUrl.get(tab.url);
+        else firstTabByUrl.set(tab.url, tab.id);
+      }
+      return item;
+    };
+    return {
+      foldersSupported: foldersSupported(),
+      currentWindowId: current.id,
+      windows: windows.map((window) => ({
+        windowId: window.id,
+        isCurrent: window.id === current.id,
+        folders: groups
+          .filter((group) => group.windowId === window.id)
+          .map((group) => ({ groupId: group.id, title: group.title || "", color: group.color, collapsed: group.collapsed })),
+        tabs: window.tabs.map(describeTab)
+      })),
+      _label: `${tabCount} Tabs gelesen${groups.length ? `, ${groups.length} Ordner` : ""}`
+    };
+  }
+
+  async function readTab(input) {
+    const [tab] = await requireTabs([input.tabId]);
+    const page = await TabTools.extractTab(tab);
+    const truncated = page.text.length > READ_TAB_MAX_CHARS;
+    return {
+      title: page.title,
+      url: page.url,
+      text: page.text.slice(0, READ_TAB_MAX_CHARS) + (truncated ? "\n[… gekürzt]" : ""),
+      _label: `Seite gelesen: ${tab.title || tab.url}`
+    };
+  }
+
+  async function focusTab(input) {
+    const [tab] = await requireTabs([input.tabId]);
+    await browser.tabs.update(tab.id, { active: true });
+    await browser.windows.update(tab.windowId, { focused: true });
+    return { ok: true, _label: `Tab geöffnet: ${tab.title || tab.url}` };
+  }
+
+  async function moveTabs(input) {
+    const tabs = await requireTabs(input.tabIds);
+    const options = { index: Number.isInteger(input.index) ? input.index : -1 };
+    if (Number.isInteger(input.windowId)) options.windowId = input.windowId;
+    await browser.tabs.move(tabs.map((tab) => tab.id), options);
+    return { ok: true, _label: `${tabs.length} ${tabs.length === 1 ? "Tab" : "Tabs"} verschoben` };
+  }
+
+  async function groupTabs(input) {
+    if (!foldersSupported()) throw new Error("Ordner (Tab-Gruppen) werden von diesem Browser nicht unterstützt. Nutze move_tabs.");
+    const tabs = await requireTabs(input.tabIds);
+    const options = { tabIds: tabs.map((tab) => tab.id) };
+    if (Number.isInteger(input.groupId)) options.groupId = input.groupId;
+    const groupId = await browser.tabs.group(options);
+    const update = {};
+    if (input.title) update.title = String(input.title).slice(0, 60);
+    if (GROUP_COLORS.includes(input.color)) update.color = input.color;
+    if (Object.keys(update).length) await browser.tabGroups.update(groupId, update);
+    const group = await getGroup(groupId);
+    return {
+      ok: true,
+      groupId,
+      _label: options.groupId !== undefined
+        ? `${tabs.length} Tabs in Ordner „${group.title || groupId}“`
+        : `Ordner „${group.title || "ohne Namen"}“ mit ${tabs.length} Tabs erstellt`
+    };
+  }
+
+  async function ungroupTabs(input) {
+    if (typeof browser.tabs.ungroup !== "function") throw new Error("Ordner werden von diesem Browser nicht unterstützt.");
+    const tabs = await requireTabs(input.tabIds);
+    await browser.tabs.ungroup(tabs.map((tab) => tab.id));
+    return { ok: true, _label: `${tabs.length} Tabs aus Ordnern gelöst` };
+  }
+
+  async function updateGroup(input) {
+    const group = await getGroup(input.groupId);
+    const update = {};
+    if (typeof input.title === "string") update.title = input.title.slice(0, 60);
+    if (GROUP_COLORS.includes(input.color)) update.color = input.color;
+    if (typeof input.collapsed === "boolean") update.collapsed = input.collapsed;
+    await browser.tabGroups.update(group.id, update);
+    return { ok: true, _label: `Ordner „${update.title || group.title || group.id}“ angepasst` };
+  }
+
+  async function moveGroup(input) {
+    const group = await getGroup(input.groupId);
+    await browser.tabGroups.move(group.id, { index: Number.isInteger(input.index) ? input.index : -1 });
+    return { ok: true, _label: `Ordner „${group.title || group.id}“ verschoben` };
+  }
+
+  async function closeTabs(input) {
+    const tabs = await requireTabs(input.tabIds);
+    const pinned = tabs.filter((tab) => tab.pinned);
+    if (pinned.length) {
+      throw new Error(`Angepinnte Tabs/Essentials werden nicht geschlossen: ${pinned.map((tab) => tab.id).join(", ")}. Lass sie weg.`);
+    }
+    await browser.tabs.remove(tabs.map((tab) => tab.id));
+    return { ok: true, closed: tabs.length, _label: `${tabs.length} ${tabs.length === 1 ? "Tab" : "Tabs"} geschlossen` };
+  }
+
+  const HANDLERS = {
+    list_tabs: listTabs,
+    read_tab: readTab,
+    focus_tab: focusTab,
+    move_tabs: moveTabs,
+    group_tabs: groupTabs,
+    ungroup_tabs: ungroupTabs,
+    update_group: updateGroup,
+    move_group: moveGroup,
+    close_tabs: closeTabs
+  };
+
+  /* Führt ein Werkzeug aus. Gibt { content (für die API), label (für die Anzeige), isError } zurück. */
+  async function execute(name, input) {
+    const handler = HANDLERS[name];
+    if (!handler) return { content: `Unbekanntes Werkzeug: ${name}`, label: `Unbekanntes Werkzeug ${name}`, isError: true };
+    try {
+      const result = await handler(input || {});
+      const label = result._label;
+      delete result._label;
+      return { content: JSON.stringify(result), label, isError: false };
+    } catch (error) {
+      return { content: error.message || String(error), label: `Fehler: ${error.message || error}`, isError: true };
+    }
+  }
+
+  /* ---------- Beschreibung für die Bestätigung ---------- */
+
+  async function describe(name, input) {
+    const titleOf = async (tabId) => {
+      try {
+        const tab = await browser.tabs.get(Number(tabId));
+        return `${tab.title || tab.url}${tab.pinned ? " (angepinnt)" : ""}`;
+      } catch (_) {
+        return `Tab ${tabId}`;
+      }
+    };
+    const groupTitleOf = async (groupId) => {
+      try {
+        const group = await getGroup(groupId);
+        return group.title || `Ordner ${groupId}`;
+      } catch (_) {
+        return `Ordner ${groupId}`;
+      }
+    };
+    const tabIds = Array.isArray(input.tabIds) ? input.tabIds : [];
+    const details = [];
+    const shown = name === "close_tabs" ? 40 : 8;
+    for (const id of tabIds.slice(0, shown)) details.push(await titleOf(id));
+    if (tabIds.length > shown) details.push(`… und ${tabIds.length - shown} weitere`);
+    const count = `${tabIds.length} ${tabIds.length === 1 ? "Tab" : "Tabs"}`;
+    const position = input.index === -1 ? "ans Ende" : `an Position ${input.index}`;
+
+    switch (name) {
+      case "move_tabs":
+        return { title: `${count} ${position} verschieben`, details };
+      case "group_tabs":
+        return Number.isInteger(input.groupId)
+          ? { title: `${count} in Ordner „${await groupTitleOf(input.groupId)}“`, details }
+          : { title: `Neuer Ordner „${input.title || "ohne Namen"}“ mit ${count}`, details };
+      case "close_tabs":
+        return { title: `${count} schliessen`, details };
+      case "ungroup_tabs":
+        return { title: `${count} aus Ordnern lösen`, details };
+      case "update_group": {
+        const changes = [];
+        if (typeof input.title === "string") changes.push(`umbenennen in „${input.title}“`);
+        if (input.color) changes.push(`Farbe ${input.color}`);
+        if (typeof input.collapsed === "boolean") changes.push(input.collapsed ? "zuklappen" : "aufklappen");
+        return { title: `Ordner „${await groupTitleOf(input.groupId)}“: ${changes.join(", ") || "anpassen"}`, details: [] };
+      }
+      case "move_group":
+        return { title: `Ordner „${await groupTitleOf(input.groupId)}“ ${position} verschieben`, details: [] };
+      default:
+        return { title: name, details: [] };
+    }
+  }
+
+  root.BrowserTools = {
+    definitions: DEFINITIONS,
+    isWrite: (name) => WRITE_TOOLS.has(name),
+    alwaysConfirm: (name) => ALWAYS_CONFIRM.has(name),
+    execute,
+    describe,
+    shortUrl
+  };
+  if (typeof module !== "undefined" && module.exports) module.exports = root.BrowserTools;
+})(typeof window !== "undefined" ? window : globalThis);

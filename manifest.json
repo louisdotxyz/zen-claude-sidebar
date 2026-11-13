@@ -1,0 +1,55 @@
+{
+  "manifest_version": 2,
+  "name": "Claude Sidebar",
+  "version": "0.3.1",
+  "description": "Private Claude-Sidebar für Zen/Firefox: Recherche mit Websuche, Produktvergleiche, Bilder, Tabs und Ordner aufräumen. Eigener API-Key, Verlauf nur lokal.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "claude-sidebar@louis.local",
+      "strict_min_version": "128.0",
+      "data_collection_permissions": {
+        "required": [
+          "websiteContent",
+          "browsingActivity"
+        ]
+      },
+      "update_url": "https://raw.githubusercontent.com/louisdotxyz/zen-claude-sidebar/main/updates.json"
+    }
+  },
+  "permissions": [
+    "tabs",
+    "tabGroups",
+    "menus",
+    "storage",
+    "unlimitedStorage",
+    "<all_urls>"
+  ],
+  "icons": {
+    "48": "icons/icon.svg",
+    "96": "icons/icon.svg"
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_action": {
+    "default_icon": "icons/icon.svg",
+    "default_title": "Claude-Sidebar ein/aus",
+    "default_area": "navbar"
+  },
+  "sidebar_action": {
+    "default_title": "Claude",
+    "default_panel": "sidebar/panel.html",
+    "default_icon": "icons/icon.svg",
+    "open_at_install": true
+  },
+  "commands": {
+    "_execute_sidebar_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+C"
+      },
+      "description": "Claude-Sidebar öffnen/schliessen"
+    }
+  }
+}
