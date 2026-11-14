@@ -75,11 +75,6 @@
         <select id="defaultEffortSelect"></select>
       </label>
       <small class="hint" data-i18n="settings.effortHint"></small>
-      <label class="field">
-        <span data-i18n="settings.customModel"></span>
-        <input type="text" id="customModelInput" placeholder="claude-…" spellcheck="false">
-        <small data-i18n="settings.customModelHint"></small>
-      </label>
     </div>
 
     <h3 data-i18n="settings.general"></h3>
@@ -155,15 +150,32 @@
     <h3 data-i18n="settings.personal"></h3>
     <div class="group">
       <label class="field">
-        <span data-i18n="settings.aboutMe"></span>
-        <textarea id="profileInput" rows="5" data-i18n-placeholder="settings.aboutMePlaceholder"></textarea>
-        <small data-i18n="settings.aboutMeHint"></small>
-      </label>
-      <label class="field">
         <span data-i18n="settings.commands"></span>
         <textarea id="customCommandsInput" rows="4" spellcheck="false" data-i18n-placeholder="settings.commandsPlaceholder"></textarea>
         <small data-i18n="settings.commandsHint"></small>
       </label>
+    </div>
+
+    <h3 data-i18n="settings.usage"></h3>
+    <div class="group">
+      <div class="row">
+        <span data-i18n="settings.usageMonth"></span>
+        <span class="row-value" id="usageMonth"></span>
+      </div>
+      <div class="row">
+        <span data-i18n="settings.usageTotal"></span>
+        <span class="row-value" id="usageTotal"></span>
+      </div>
+      <small class="hint"><span data-i18n="settings.usageHint"></span> <a href="https://console.anthropic.com/usage" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></small>
+    </div>
+
+    <h3 data-i18n="settings.update"></h3>
+    <div class="group">
+      <div class="row">
+        <span id="versionLabel"></span>
+        <button class="text-button" id="updateButton" type="button" data-i18n="settings.checkUpdate"></button>
+      </div>
+      <small class="hint" id="updateStatus" data-i18n="settings.updateHint"></small>
     </div>
 
     <h3 data-i18n="settings.data"></h3>
@@ -171,7 +183,6 @@
       <p class="hint" data-i18n="settings.privacy"></p>
       <button class="danger-button" id="clearHistoryButton" type="button"></button>
     </div>
-    <p class="hint version" id="versionLabel"></p>
   </section>
 
   <!-- Eingabe -->

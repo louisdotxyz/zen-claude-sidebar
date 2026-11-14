@@ -73,7 +73,7 @@
       this.blocks = [];
       this.partialJson = [];
       this.stopReason = null;
-      this.usage = { inputTokens: 0, outputTokens: 0 };
+      this.usage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
       this.onText = onText || (() => {});
       this.onToolStart = onToolStart || (() => {});
     }
@@ -84,6 +84,7 @@
           break;
         case "content_block_start": {
           const block = Object.assign({}, event.content_block);
+          if (block.type === "server_tool_use" && block.name === "web_search") this.usage.webSearches++;
           if (block.type === "tool_use" || block.type === "server_tool_use") {
             block.input = {};
             this.partialJson[event.index] = "";

@@ -1,5 +1,27 @@
 /* Ein- und Ausblenden läuft über das Tastenkürzel (_execute_sidebar_action), ohne Toolbar-Button. */
 
+/* Auto-Update: alle 6 Stunden nachfragen (Firefox selbst nur etwa täglich).
+   Ein gefundenes Update wird sofort installiert, ausser Claude schreibt gerade eine Antwort;
+   dann installiert es die Sidebar, sobald sie fertig ist. */
+const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const BUSY_TIMEOUT_MS = 10 * 60 * 1000;
+
+browser.runtime.onUpdateAvailable.addListener(async (details) => {
+  await browser.storage.local.set({ updateReady: { version: details.version, time: Date.now() } });
+  const { busySince } = await browser.storage.local.get("busySince");
+  if (!busySince || Date.now() - busySince > BUSY_TIMEOUT_MS) browser.runtime.reload();
+});
+
+async function checkForUpdate() {
+  try {
+    await browser.runtime.requestUpdateCheck();
+  } catch (_) {
+    /* z. B. temporär geladene Extension: keine Updates */
+  }
+}
+setTimeout(checkForUpdate, 60 * 1000);
+setInterval(checkForUpdate, UPDATE_INTERVAL_MS);
+
 /* Rechtsklick-Menü für markierten Text und Bilder. Die Texte folgen der Sprache aus den Einstellungen. */
 const MENU_ACTIONS = {
   explain: ["selection"],

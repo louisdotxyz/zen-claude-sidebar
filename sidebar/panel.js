@@ -12,6 +12,13 @@
     { id: "medium", key: "settings.effortMedium" },
     { id: "high", key: "settings.effortHigh" }
   ];
+  /* Listenpreise in USD pro Million Tokens (platform.claude.com/docs/en/about-claude/pricing, Nov. 2026) */
+  const PRICES = {
+    "claude-sonnet-5-5": { input: 2, output: 10 },
+    "claude-opus-5-5": { input: 4, output: 20 },
+    "claude-haiku-5-5": { input: 0.1, output: 0.5, longInput: 0.5, longOutput: 2.5 }
+  };
+  const WEB_SEARCH_PRICE = 0.01;
   const MAX_CONVERSATIONS = 200;
   const MAX_TOOL_ROUNDS = 15;
   const MAX_ATTACHMENTS = 6;
@@ -49,9 +56,10 @@
     "chatView", "historyView", "settingsView", "messageList", "emptyState", "summarizeButton", "compareButton", "overviewButton",
     "newChatButton", "historyButton", "cleanupButton", "settingsButton", "historyList", "priceButton",
     "uploadButton", "fileInput", "screenshotButton", "regionSelect", "shortcutLabel", "shortcutButton", "copyCssButton",
-    "settingsSaved", "settingsNotice", "apiKeyInput", "toggleKeyButton", "defaultModelSelect", "defaultEffortSelect", "customModelInput",
+    "settingsSaved", "settingsNotice", "apiKeyInput", "toggleKeyButton", "defaultModelSelect", "defaultEffortSelect",
+    "usageMonth", "usageTotal", "updateButton", "updateStatus",
     "languageSelect", "appearanceSelect", "backgroundModeSelect", "backgroundColorInput",
-    "webSearchCheckbox", "confirmChangesCheckbox", "profileInput", "customCommandsInput", "clearHistoryButton", "versionLabel",
+    "webSearchCheckbox", "confirmChangesCheckbox", "customCommandsInput", "clearHistoryButton", "versionLabel",
     "composer", "pageChip", "pageChipLabel", "extraTabChips", "addTabsButton", "tabPicker", "tabPickerSearch", "tabPickerList",
     "suggestBox", "dropOverlay", "promptInput", "sendButton", "modelSelect", "effortSelect", "usageLabel"
   ].forEach((id) => (ui[id] = element(id)));
@@ -60,7 +68,6 @@
     settings: {
       apiKey: "",
       defaultModel: MODELS[0].id,
-      customModel: "",
       effort: "",
       language: "auto",
       appearance: "auto",
@@ -68,10 +75,10 @@
       confirmChanges: true,
       webSearch: true,
       region: "ch",
-      profile: "",
       customCommands: ""
     },
     conversations: [],
+    usageStats: { total: {}, months: {} },
     currentId: null,
     currentModel: MODELS[0].id,
     currentEffort: "",
@@ -118,7 +125,8 @@
   }
 
   async function loadState() {
-    const stored = await browser.storage.local.get(["settings", "conversations", "currentId"]);
+    const stored = await browser.storage.local.get(["settings", "conversations", "currentId", "usageStats"]);
+    if (stored.usageStats && typeof stored.usageStats === "object") state.usageStats = Object.assign({ total: {}, months: {} }, stored.usageStats);
     state.settings = Object.assign(state.settings, stored.settings || {});
     state.conversations = (Array.isArray(stored.conversations) ? stored.conversations : []).map(migrateConversation);
     state.currentId = stored.currentId && findConversation(stored.currentId) ? stored.currentId : null;
@@ -231,8 +239,6 @@
 
   function availableModels() {
     const list = MODELS.slice();
-    const custom = (state.settings.customModel || "").trim();
-    if (custom && !list.some((model) => model.id === custom)) list.push({ id: custom, label: custom });
     if (!list.some((model) => model.id === state.currentModel)) list.push({ id: state.currentModel, label: state.currentModel });
     return list;
   }
@@ -288,6 +294,7 @@
     const messages = conversation ? conversation.messages : [];
     ui.emptyState.hidden = messages.length > 0;
     messages.forEach((message) => ui.messageList.appendChild(buildMessageElement(message)));
+    renderUsageLabel();
     scrollToBottom(true);
   }
 
@@ -645,10 +652,6 @@
     const languageName = I18n.language === "de" ? "German" : "English";
     let system = `${ClaudeApi.SYSTEM_PROMPT}\n\nThe interface language is ${languageName}. Use it when the user's own language is unclear and for short notes about tab actions.`;
     system += `\nThe user's shopping region: ${REGIONS[state.settings.region] || REGIONS.ch}. Today is ${new Date().toISOString().slice(0, 10)}.`;
-    const profile = (state.settings.profile || "").trim();
-    if (profile) {
-      system += `\n\nThe user wrote this about themselves and how they want answers. Follow it where it applies:\n<user_profile>\n${profile.slice(0, 6000)}\n</user_profile>`;
-    }
     return system;
   }
 
@@ -720,6 +723,8 @@
       });
       usage.inputTokens += result.usage.inputTokens;
       usage.outputTokens += result.usage.outputTokens;
+      usage.searches += result.usage.webSearches || 0;
+      usage.cost += callCost(state.currentModel, result.usage);
 
       if (result.content.length) conversation.apiMessages.push({ role: "assistant", content: result.content });
       noteServerTools(result.content, parts, sources);
@@ -856,7 +861,7 @@
       return { type: "text", text: `<file name="${attachment.name.replace(/"/g, "'")}">\n${attachment.text}\n</file>` };
     });
     conversation.apiMessages.push({ role: "user", content: attachmentBlocks.length ? attachmentBlocks.concat([{ type: "text", text: apiText }]) : apiText });
-    const usage = { inputTokens: 0, outputTokens: 0 };
+    const usage = { inputTokens: 0, outputTokens: 0, searches: 0, cost: 0 };
     state.abortController = new AbortController();
     try {
       await runAgent(conversation, assistantMessage, render, usage);
@@ -882,7 +887,8 @@
       delete assistantMessage.streaming;
       state.abortController = null;
       conversation.updatedAt = Date.now();
-      ui.usageLabel.textContent = t("usage", { in: formatNumber(usage.inputTokens), out: formatNumber(usage.outputTokens) });
+      await recordUsage(conversation, usage);
+      renderUsageLabel();
       updateAssistantElement(assistantElement, assistantMessage);
       scrollToBottom(false);
       await saveConversations();
@@ -890,7 +896,86 @@
     }
   }
 
+  /* ---------- Verbrauch ---------- */
+
+  function callCost(model, usage) {
+    const price = PRICES[model] || PRICES["claude-sonnet-5-5"];
+    const long = price.longInput && usage.inputTokens > 100000;
+    const input = long ? price.longInput : price.input;
+    const output = long ? price.longOutput : price.output;
+    return (usage.inputTokens * input + usage.outputTokens * output) / 1e6 + (usage.webSearches || 0) * WEB_SEARCH_PRICE;
+  }
+
+  function addUsage(target, usage) {
+    target.requests = (target.requests || 0) + 1;
+    target.input = (target.input || 0) + usage.inputTokens;
+    target.output = (target.output || 0) + usage.outputTokens;
+    target.searches = (target.searches || 0) + usage.searches;
+    target.cost = (target.cost || 0) + usage.cost;
+    return target;
+  }
+
+  async function recordUsage(conversation, usage) {
+    if (!usage.inputTokens && !usage.outputTokens) return;
+    conversation.usage = addUsage(conversation.usage || {}, usage);
+    const month = new Date().toISOString().slice(0, 7);
+    const stats = state.usageStats;
+    stats.months[month] = addUsage(stats.months[month] || {}, usage);
+    addUsage(stats.total, usage);
+    const months = Object.keys(stats.months).sort();
+    while (months.length > 24) delete stats.months[months.shift()];
+    await browser.storage.local.set({ usageStats: stats });
+  }
+
+  const formatCost = (cost) => (cost > 0 && cost < 0.01 ? "< $0.01" : `≈ $${(cost || 0).toFixed(2)}`);
+  const formatTokens = (count) => (count >= 1e6 ? `${(count / 1e6).toFixed(1)} M` : count >= 1e4 ? `${Math.round(count / 1000)} k` : formatNumber(count));
+  const usageSummary = (entry) =>
+    entry && entry.requests
+      ? t("usage.summary", { cost: formatCost(entry.cost), requests: formatNumber(entry.requests), tokens: formatTokens((entry.input || 0) + (entry.output || 0)) })
+      : t("usage.none");
+
+  function renderUsageLabel() {
+    const conversation = currentConversation();
+    const usage = conversation && conversation.usage;
+    ui.usageLabel.textContent = usage && usage.requests ? t("usage.chat", { tokens: formatTokens((usage.input || 0) + (usage.output || 0)), cost: formatCost(usage.cost) }) : "";
+    ui.usageLabel.title = usage && usage.requests ? t("usage.chatTitle", { input: formatNumber(usage.input), output: formatNumber(usage.output), searches: usage.searches || 0 }) : "";
+  }
+
+  function renderUsageSettings() {
+    ui.usageMonth.textContent = usageSummary(state.usageStats.months[new Date().toISOString().slice(0, 7)]);
+    ui.usageTotal.textContent = usageSummary(state.usageStats.total);
+  }
+
+  /* ---------- Updates ---------- */
+
+  async function checkForUpdate() {
+    ui.updateButton.disabled = true;
+    ui.updateStatus.textContent = t("update.checking");
+    try {
+      const result = await browser.runtime.requestUpdateCheck();
+      const status = Array.isArray(result) ? result[0] : result && result.status;
+      const version = Array.isArray(result) ? result[1] && result[1].version : result && result.version;
+      if (status === "update_available") ui.updateStatus.textContent = t("update.available", { version: version || "" });
+      else if (status === "throttled") ui.updateStatus.textContent = t("update.throttled");
+      else ui.updateStatus.textContent = t("update.current");
+    } catch (error) {
+      ui.updateStatus.textContent = t("update.failed", { error: error.message || error });
+    } finally {
+      ui.updateButton.disabled = false;
+    }
+  }
+
+  /* Update aufgeschoben, weil Claude gerade schrieb: jetzt installieren. */
+  async function applyPendingUpdate() {
+    const { updateReady } = await browser.storage.local.get("updateReady");
+    if (updateReady && updateReady.version !== browser.runtime.getManifest().version) browser.runtime.reload();
+  }
+
   function setBusy(busy) {
+    if (busy !== state.busy) {
+      if (busy) browser.storage.local.set({ busySince: Date.now() });
+      else browser.storage.local.remove("busySince").then(applyPendingUpdate).catch(() => {});
+    }
     state.busy = busy;
     ui.sendButton.classList.toggle("is-busy", busy);
     ui.sendButton.title = t(busy ? "input.stop" : "input.send");
@@ -916,7 +1001,6 @@
     state.attachments = [];
     state.selection = "";
     state.includePage = true;
-    ui.usageLabel.textContent = "";
     renderContextChips();
     renderConversation();
     browser.storage.local.set({ currentId: null });
@@ -954,7 +1038,6 @@
           state.currentId = conversation.id;
           state.currentModel = conversation.model || state.settings.defaultModel;
           fillModelSelect(ui.modelSelect, state.currentModel);
-          ui.usageLabel.textContent = "";
           browser.storage.local.set({ currentId: conversation.id });
           renderConversation();
           showView("chatView");
@@ -983,7 +1066,6 @@
     const settings = state.settings;
     ui.settingsNotice.hidden = Boolean(settings.apiKey) || !ui.settingsNotice.textContent;
     ui.apiKeyInput.value = settings.apiKey || "";
-    ui.customModelInput.value = settings.customModel || "";
     fillModelSelect(ui.defaultModelSelect, settings.defaultModel);
     fillEffortSelect(ui.defaultEffortSelect, settings.effort || "");
     ui.languageSelect.value = ["de", "en"].includes(settings.language) ? settings.language : "auto";
@@ -996,9 +1078,9 @@
     ui.webSearchCheckbox.checked = settings.webSearch !== false;
     ui.regionSelect.value = REGIONS[settings.region] ? settings.region : "ch";
     renderShortcut();
-    ui.profileInput.value = settings.profile || "";
     ui.customCommandsInput.value = settings.customCommands || "";
-    ui.versionLabel.textContent = `Claude Sidebar ${browser.runtime && browser.runtime.getManifest ? browser.runtime.getManifest().version : ""}`;
+    ui.versionLabel.textContent = t("settings.version", { version: browser.runtime && browser.runtime.getManifest ? browser.runtime.getManifest().version : "" });
+    renderUsageSettings();
   }
 
   let savedTimer = null;
@@ -1006,7 +1088,6 @@
     const settings = state.settings;
     const before = { language: settings.language, appearance: settings.appearance, background: settings.background };
     settings.apiKey = ui.apiKeyInput.value.trim();
-    settings.customModel = ui.customModelInput.value.trim();
     settings.defaultModel = ui.defaultModelSelect.value || settings.defaultModel;
     settings.effort = ui.defaultEffortSelect.value;
     settings.language = ui.languageSelect.value;
@@ -1016,7 +1097,6 @@
     settings.confirmChanges = ui.confirmChangesCheckbox.checked;
     settings.webSearch = ui.webSearchCheckbox.checked;
     settings.region = ui.regionSelect.value;
-    settings.profile = ui.profileInput.value.trim();
     settings.customCommands = ui.customCommandsInput.value.trim();
     await saveSettings();
 
@@ -1185,7 +1265,7 @@
     ui.usageLabel.textContent = text;
     clearTimeout(flashTimer);
     flashTimer = setTimeout(() => {
-      if (ui.usageLabel.textContent === text) ui.usageLabel.textContent = "";
+      if (ui.usageLabel.textContent === text) renderUsageLabel();
     }, 3000);
   }
 
@@ -1454,12 +1534,13 @@
       ui.toggleKeyButton.textContent = t(hidden ? "settings.hide" : "settings.show");
     });
     for (const control of [
-      ui.apiKeyInput, ui.customModelInput, ui.defaultModelSelect, ui.defaultEffortSelect, ui.languageSelect, ui.appearanceSelect,
-      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.regionSelect, ui.confirmChangesCheckbox, ui.profileInput, ui.customCommandsInput
+      ui.apiKeyInput, ui.defaultModelSelect, ui.defaultEffortSelect, ui.languageSelect, ui.appearanceSelect,
+      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.regionSelect, ui.confirmChangesCheckbox, ui.customCommandsInput
     ]) {
       control.addEventListener("change", saveSettingsFromForm);
     }
     ui.clearHistoryButton.addEventListener("click", handleClearHistory);
+    ui.updateButton.addEventListener("click", checkForUpdate);
     ui.shortcutButton.addEventListener("click", () => {
       if (browser.commands && typeof browser.commands.openShortcutSettings === "function") browser.commands.openShortcutSettings();
     });
@@ -1549,6 +1630,11 @@
     bindEvents();
     applyLanguage();
     await refreshActiveTab();
+    const { updateReady } = await browser.storage.local.get("updateReady");
+    if (updateReady && updateReady.version === browser.runtime.getManifest().version) {
+      await browser.storage.local.remove("updateReady");
+      flash(t("update.done", { version: updateReady.version }));
+    }
     if (!state.settings.apiKey) {
       ui.settingsNotice.textContent = t("error.welcome");
       showView("settingsView");
