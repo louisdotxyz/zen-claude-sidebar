@@ -443,6 +443,13 @@
       error.className = "message-error";
       error.textContent = message.error;
       body.appendChild(error);
+      if (message.retry) {
+        const retry = document.createElement("button");
+        retry.className = "soft-button retry-button";
+        retry.textContent = t("msg.retry");
+        retry.addEventListener("click", () => retryMessage(message));
+        body.appendChild(retry);
+      }
     }
   }
 
@@ -750,7 +757,8 @@
           render();
         }
       });
-      usage.inputTokens += result.usage.inputTokens;
+      usage.inputTokens += result.usage.inputTokens + (result.usage.cacheWrite || 0) + (result.usage.cacheRead || 0);
+      usage.cached = (usage.cached || 0) + (result.usage.cacheRead || 0);
       usage.outputTokens += result.usage.outputTokens;
       usage.searches += result.usage.webSearches || 0;
       usage.cost += callCost(state.currentModel, result.usage);
@@ -851,7 +859,7 @@
       : pages.map((page) => ({ title: page.title, url: page.url }));
     if (selection) contexts.push({ title: t("msg.selection") });
     /* display: kurzer Text für die Sprechblase (z. B. „/vergleichen“), text geht an Claude */
-    const userMessage = { role: "user", text: options.display || text, contexts };
+    const userMessage = { role: "user", text: options.display || text, contexts, prompt: text, options: { forcePage: Boolean(options.forcePage), noPage: Boolean(options.noPage), display: options.display || "" } };
     if (images.length) userMessage.images = images.map((image) => image.thumb);
     if (files.length) userMessage.files = files.map((file) => ({ name: file.name, kind: file.kind }));
     const assistantMessage = { role: "assistant", parts: [], streaming: true };
@@ -916,6 +924,7 @@
       } else {
         if (nothingCompleted) conversation.apiMessages.length = snapshotLength;
         assistantMessage.error = error.message || t("error.unknown");
+        assistantMessage.retry = true;
         if (/web_search/i.test(assistantMessage.error)) assistantMessage.error += ` ${t("error.webSearch")}`;
       }
     } finally {
@@ -934,12 +943,15 @@
 
   /* ---------- Verbrauch ---------- */
 
+  /* Cache: Schreiben 1.25×, Lesen 0.1× des Eingabepreises */
   function callCost(model, usage) {
     const price = PRICES[model] || PRICES["claude-sonnet-5-5"];
-    const long = price.longInput && usage.inputTokens > 100000;
+    const totalInput = usage.inputTokens + (usage.cacheWrite || 0) + (usage.cacheRead || 0);
+    const long = price.longInput && totalInput > 100000;
     const input = long ? price.longInput : price.input;
     const output = long ? price.longOutput : price.output;
-    return (usage.inputTokens * input + usage.outputTokens * output) / 1e6 + (usage.webSearches || 0) * WEB_SEARCH_PRICE;
+    const inputCost = usage.inputTokens * input + (usage.cacheWrite || 0) * input * 1.25 + (usage.cacheRead || 0) * input * 0.1;
+    return (inputCost + usage.outputTokens * output) / 1e6 + (usage.webSearches || 0) * WEB_SEARCH_PRICE;
   }
 
   function addUsage(target, usage) {
@@ -948,6 +960,7 @@
     target.output = (target.output || 0) + usage.outputTokens;
     target.searches = (target.searches || 0) + usage.searches;
     target.cost = (target.cost || 0) + usage.cost;
+    target.cached = (target.cached || 0) + (usage.cached || 0);
     return target;
   }
 
@@ -974,7 +987,7 @@
     const conversation = currentConversation();
     const usage = conversation && conversation.usage;
     ui.usageLabel.textContent = usage && usage.requests ? t("usage.chat", { tokens: formatTokens((usage.input || 0) + (usage.output || 0)), cost: formatCost(usage.cost) }) : "";
-    ui.usageLabel.title = usage && usage.requests ? t("usage.chatTitle", { input: formatNumber(usage.input), output: formatNumber(usage.output), searches: usage.searches || 0 }) : "";
+    ui.usageLabel.title = usage && usage.requests ? t("usage.chatTitle", { input: formatNumber(usage.input), output: formatNumber(usage.output), searches: usage.searches || 0, cached: formatNumber(usage.cached || 0) }) : "";
   }
 
   function renderUsageSettings() {
@@ -1005,6 +1018,20 @@
   async function applyPendingUpdate() {
     const { updateReady } = await browser.storage.local.get("updateReady");
     if (updateReady && updateReady.version !== browser.runtime.getManifest().version) browser.runtime.reload();
+  }
+
+  /* Fehlgeschlagene Anfrage nochmals senden (Text und Seiten-Kontext; Anhänge müssten neu angehängt werden) */
+  async function retryMessage(assistantMessage) {
+    const conversation = currentConversation();
+    if (state.busy || !conversation) return;
+    const index = conversation.messages.indexOf(assistantMessage);
+    const userMessage = index > 0 ? conversation.messages[index - 1] : null;
+    if (!userMessage || userMessage.role !== "user") return;
+    conversation.messages.splice(index - 1, 2);
+    renderConversation();
+    const options = Object.assign({}, userMessage.options || {});
+    if (!options.display) delete options.display;
+    await sendMessage(userMessage.prompt || userMessage.text, options);
   }
 
   function setBusy(busy) {
@@ -1545,6 +1572,17 @@
       if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
         event.preventDefault();
         submitPrompt();
+        return;
+      }
+      /* Pfeil hoch im leeren Feld: letzte eigene Nachricht zum Bearbeiten */
+      if (event.key === "ArrowUp" && !ui.promptInput.value) {
+        const conversation = currentConversation();
+        const last = conversation && [...conversation.messages].reverse().find((message) => message.role === "user" && !(message.options && message.options.display));
+        if (last) {
+          event.preventDefault();
+          ui.promptInput.value = last.prompt || last.text;
+          autoGrow();
+        }
       }
     });
     ui.sendButton.addEventListener("click", () => {

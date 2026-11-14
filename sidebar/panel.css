@@ -315,3 +315,4 @@ input[type="color"] { width: 28px; height: 28px; padding: 0; border: 0; border-r
 .row-controls select { max-width: none; }
 .row-value { color: var(--text-muted); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
 .group .danger-button { padding: 7px 14px; align-self: flex-start; margin: 4px 0; }
+.retry-button { margin-top: 6px; font-size: 12.5px; padding: 5px 12px; }

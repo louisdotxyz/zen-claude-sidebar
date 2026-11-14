@@ -48,6 +48,7 @@
       "msg.copied": "Kopiert",
       "msg.sources": "Quellen",
       "msg.selection": "Auswahl",
+      "msg.retry": "Nochmal versuchen",
       "msg.selectedTabs": "{count} ausgewählten Tabs",
 
       "confirm.title": "Claude möchte deine Tabs ändern:",
@@ -108,7 +109,7 @@
       "flash.effortUnsupported": "Dieses Modell kennt keine Stufen, sende ohne.",
       "usage": "{in} in · {out} out",
       "usage.chat": "{tokens} Tokens · {cost}",
-      "usage.chatTitle": "Dieser Chat: {input} Tokens rein, {output} raus, {searches} Websuchen",
+      "usage.chatTitle": "Dieser Chat: {input} Tokens rein (davon {cached} günstig aus dem Cache), {output} raus, {searches} Websuchen",
       "usage.summary": "{cost} · {requests} Anfragen · {tokens} Tokens",
       "usage.none": "noch nichts",
       "update.checking": "Suche nach Updates …",
@@ -297,6 +298,7 @@
       "msg.copied": "Copied",
       "msg.sources": "Sources",
       "msg.selection": "Selection",
+      "msg.retry": "Try again",
       "msg.selectedTabs": "{count} selected tabs",
 
       "confirm.title": "Claude wants to change your tabs:",
@@ -357,7 +359,7 @@
       "flash.effortUnsupported": "This model has no effort levels, sending without.",
       "usage": "{in} in · {out} out",
       "usage.chat": "{tokens} tokens · {cost}",
-      "usage.chatTitle": "This chat: {input} tokens in, {output} out, {searches} web searches",
+      "usage.chatTitle": "This chat: {input} tokens in ({cached} cheap from cache), {output} out, {searches} web searches",
       "usage.summary": "{cost} · {requests} requests · {tokens} tokens",
       "usage.none": "nothing yet",
       "update.checking": "Checking for updates …",

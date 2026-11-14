@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Claude Sidebar",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Private Claude-Sidebar für Zen/Firefox: Recherche mit Websuche, Produktvergleiche, Bilder, Tabs und Ordner aufräumen. Eigener API-Key, Verlauf nur lokal.",
   "browser_specific_settings": {
     "gecko": {
@@ -48,5 +48,10 @@
       },
       "description": "Claude-Sidebar ein-/ausblenden"
     }
+  },
+  "browser_action": {
+    "default_icon": "icons/icon.svg",
+    "default_title": "Claude ein/aus",
+    "default_area": "navbar"
   }
 }

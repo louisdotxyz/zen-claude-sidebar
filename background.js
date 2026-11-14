@@ -1,4 +1,7 @@
-/* Ein- und Ausblenden läuft über das Tastenkürzel (_execute_sidebar_action), ohne Toolbar-Button. */
+/* Ein- und Ausblenden: Toolbar-Knopf oder Tastenkürzel (_execute_sidebar_action). */
+browser.browserAction.onClicked.addListener(() => {
+  browser.sidebarAction.toggle();
+});
 
 /* Auto-Update: alle 6 Stunden nachfragen (Firefox selbst nur etwa täglich).
    Ein gefundenes Update wird sofort installiert, ausser Claude schreibt gerade eine Antwort;

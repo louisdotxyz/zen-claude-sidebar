@@ -3,7 +3,7 @@
 Private Claude-Sidebar für Zen (und Firefox). Kein Server dazwischen: Anfragen gehen direkt vom Browser an die Anthropic-API, der Verlauf bleibt lokal im Browser-Profil.
 
 ## Funktionen
-- **Ein-/Ausblenden**: `Alt+Shift+C` (änderbar in den Einstellungen bzw. `about:addons` → Zahnrad → Tastenkürzel verwalten). Kein Toolbar-Button.
+- **Ein-/Ausblenden**: Toolbar-Knopf (Stern) oder `Alt+Shift+C`.
 - **Kopfzeile „Claude ⌄ ✕“ ausblenden**: gehört zu Zen. Einstellungen → Seitenleiste → „CSS kopieren“, in `chrome/userChrome.css` im Zen-Profil einfügen, Zen neu starten.
 - **Befehle mit `/`**: `/zusammenfassen`, `/recherche`, `/vergleichen`, `/finden`, `/aufräumen`, `/sortieren`, `/übersicht`, `/erklären`, `/übersetzen`. Eigene Befehle in den Einstellungen (`name: Prompt`).
 - **Tabs mit `@`** dazunehmen, oder über „+ Tabs“. Die aktuelle Seite geht über den Chip „Diese Seite“ mit.
@@ -15,6 +15,8 @@ Private Claude-Sidebar für Zen (und Firefox). Kein Server dazwischen: Anfragen 
 - **Tabs und Ordner**: lesen, in Ordner sortieren, umbenennen, verschieben. „Aufräumen“ schlägt zusätzlich Duplikate und lange unbenutzte Tabs zum Schliessen vor. Schliessen fragt immer nach; angepinnte Tabs werden nie geschlossen.
 - **Einstellungen**: Sprache (Deutsch/English), Aussehen, Hintergrundfarbe (folgt dem Browser-Theme oder eigene Farbe), Standard-Modell und Stufe (Niedrig/Mittel/Hoch). Änderungen speichern sich sofort.
 - **Über mich**: Text in den Einstellungen, der bei jeder Anfrage mitgeht.
+- **Günstiger dank Prompt-Caching**: System, Werkzeuge und bisheriger Chat werden bei Anthropic zwischengespeichert; Folgeaufrufe kosten für diesen Teil nur 10 %.
+- **Fehler**: „Nochmal versuchen“ sendet die Anfrage erneut. Pfeil hoch im leeren Feld holt die letzte eigene Nachricht.
 - **Verlauf**: lokal gespeichert, einzeln oder komplett löschbar. Modell im Chat umschaltbar.
 
 ## Installieren

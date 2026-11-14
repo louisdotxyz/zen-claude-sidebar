@@ -74,14 +74,19 @@
       this.blocks = [];
       this.partialJson = [];
       this.stopReason = null;
-      this.usage = { inputTokens: 0, outputTokens: 0, webSearches: 0 };
+      this.usage = { inputTokens: 0, outputTokens: 0, webSearches: 0, cacheWrite: 0, cacheRead: 0 };
       this.onText = onText || (() => {});
       this.onToolStart = onToolStart || (() => {});
     }
     handle(event) {
       switch (event.type) {
         case "message_start":
-          if (event.message && event.message.usage) this.usage.inputTokens = event.message.usage.input_tokens || 0;
+          if (event.message && event.message.usage) {
+            const usage = event.message.usage;
+            this.usage.inputTokens = usage.input_tokens || 0;
+            this.usage.cacheWrite = usage.cache_creation_input_tokens || 0;
+            this.usage.cacheRead = usage.cache_read_input_tokens || 0;
+          }
           break;
         case "content_block_start": {
           const block = Object.assign({}, event.content_block);
@@ -206,8 +211,34 @@
   }
 
   /* Streamt eine Antwort inkl. Tool-Aufrufen. */
+  /* Prompt-Caching: Werkzeuge + System (1. Marke) und alles bis zur letzten Nachricht (2. Marke).
+     Folgeaufrufe in derselben Antwort (Werkzeug-Runden) und weitere Fragen im Chat lesen dann günstig aus dem Cache. */
+  const CACHE = { type: "ephemeral" };
+  const CACHEABLE = new Set(["text", "image", "document", "tool_result"]);
+
+  function withCacheMarks(messages) {
+    if (!messages.length) return messages;
+    const result = messages.slice();
+    const last = result[result.length - 1];
+    const content = typeof last.content === "string" ? [{ type: "text", text: last.content }] : last.content.map((block) => Object.assign({}, block));
+    for (let index = content.length - 1; index >= 0; index--) {
+      if (CACHEABLE.has(content[index].type) && !(content[index].type === "text" && !content[index].text)) {
+        content[index].cache_control = CACHE;
+        break;
+      }
+    }
+    result[result.length - 1] = Object.assign({}, last, { content });
+    return result;
+  }
+
   async function streamMessage({ apiKey, model, messages, tools, system, effort, maxTokens = 4096, signal, onText, onToolStart }) {
-    const body = { model, max_tokens: maxTokens, system: system || SYSTEM_PROMPT, messages: sanitizeMessages(messages), stream: true };
+    const body = {
+      model,
+      max_tokens: maxTokens,
+      system: [{ type: "text", text: system || SYSTEM_PROMPT, cache_control: CACHE }],
+      messages: withCacheMarks(sanitizeMessages(messages)),
+      stream: true
+    };
     if (tools && tools.length) body.tools = tools;
     if (effort) body.output_config = { effort };
     const response = await fetch(API_URL, { method: "POST", headers: buildHeaders(apiKey), body: JSON.stringify(body), signal });
@@ -225,6 +256,6 @@
     return { content: assembler.content(), stopReason: assembler.stopReason, usage: assembler.usage };
   }
 
-  root.ClaudeApi = { streamMessage, sanitizeMessages, SseParser, MessageAssembler, SYSTEM_PROMPT };
+  root.ClaudeApi = { streamMessage, sanitizeMessages, withCacheMarks, SseParser, MessageAssembler, SYSTEM_PROMPT };
   if (typeof module !== "undefined" && module.exports) module.exports = root.ClaudeApi;
 })(typeof window !== "undefined" ? window : globalThis);
