@@ -298,3 +298,15 @@ input[type="color"] { width: 28px; height: 28px; padding: 0; border: 0; border-r
   background: color-mix(in srgb, var(--background) 88%, transparent);
   font-size: 13px;
 }
+
+/* 0.5: Anhänge, Upload und Screenshot */
+.icon-button.small { width: 26px; height: 26px; color: var(--text-muted); }
+.icon-button.small svg { width: 15px; height: 15px; }
+.composer-meta .icon-button.small + select { margin-left: 4px; }
+.chip-file { gap: 5px; }
+.file-icon { display: inline-grid; place-items: center; flex: none; }
+.file-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.message-files { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.file-badge { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 9px; border-radius: 999px; background: var(--surface); font-size: 12px; }
+.file-badge .chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+#shortcutLabel:empty { display: none; }

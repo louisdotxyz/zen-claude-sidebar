@@ -1,7 +1,4 @@
-/* Toolbar-Button: blendet die Claude-Sidebar ein und aus. */
-browser.browserAction.onClicked.addListener(() => {
-  browser.sidebarAction.toggle();
-});
+/* Ein- und Ausblenden läuft über das Tastenkürzel (_execute_sidebar_action), ohne Toolbar-Button. */
 
 /* Rechtsklick-Menü für markierten Text und Bilder. Die Texte folgen der Sprache aus den Einstellungen. */
 const MENU_ACTIONS = {

@@ -30,6 +30,7 @@
       <p class="empty-title" data-i18n="empty.title"></p>
       <button class="soft-button" id="summarizeButton" data-i18n="empty.summarize"></button>
       <button class="soft-button" id="compareButton" data-i18n="empty.compare"></button>
+      <button class="soft-button" id="priceButton" data-i18n="empty.price"></button>
       <button class="soft-button" id="overviewButton" data-i18n="empty.overview"></button>
       <p class="hint empty-hint">
         <kbd>/</kbd> <span data-i18n="empty.hintCommands"></span> · <kbd>@</kbd> <span data-i18n="empty.hintTabs"></span> · <span data-i18n="empty.hintImage"></span>
@@ -119,10 +120,36 @@
         <input type="checkbox" class="switch" id="webSearchCheckbox">
       </label>
       <label class="row">
+        <span data-i18n="settings.region"></span>
+        <select id="regionSelect">
+          <option value="ch" data-i18n="settings.regionCh"></option>
+          <option value="de" data-i18n="settings.regionDe"></option>
+          <option value="at" data-i18n="settings.regionAt"></option>
+          <option value="eu" data-i18n="settings.regionEu"></option>
+        </select>
+      </label>
+      <label class="row">
         <span data-i18n="settings.confirm"></span>
         <input type="checkbox" class="switch" id="confirmChangesCheckbox">
       </label>
       <small class="hint" data-i18n="settings.closeAlways"></small>
+    </div>
+
+    <h3 data-i18n="settings.sidebar"></h3>
+    <div class="group">
+      <div class="row">
+        <span data-i18n="settings.shortcut"></span>
+        <span class="row-controls">
+          <kbd id="shortcutLabel"></kbd>
+          <button class="text-button" id="shortcutButton" type="button" data-i18n="settings.changeShortcut"></button>
+        </span>
+      </div>
+      <small class="hint" data-i18n="settings.shortcutHint"></small>
+      <div class="row">
+        <span data-i18n="settings.header"></span>
+        <button class="text-button" id="copyCssButton" type="button" data-i18n="settings.copyCss"></button>
+      </div>
+      <small class="hint" data-i18n="settings.headerHint"></small>
     </div>
 
     <h3 data-i18n="settings.personal"></h3>
@@ -169,6 +196,13 @@
       </button>
     </div>
     <div class="composer-meta">
+      <button class="icon-button small" id="uploadButton" type="button" data-i18n-title="input.upload">
+        <svg viewBox="0 0 24 24"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      </button>
+      <button class="icon-button small" id="screenshotButton" type="button" data-i18n-title="input.screenshot">
+        <svg viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.5"/></svg>
+      </button>
+      <input type="file" id="fileInput" multiple accept="image/*,application/pdf,.pdf,text/*,.md,.csv,.json,.txt" hidden>
       <select id="modelSelect" data-i18n-title="ui.model"></select>
       <select id="effortSelect" data-i18n-title="ui.effort"></select>
       <span class="usage" id="usageLabel"></span>
@@ -179,6 +213,7 @@
   <script src="i18n.js"></script>
   <script src="markdown.js"></script>
   <script src="api.js"></script>
+  <script src="shop.js"></script>
   <script src="tabs.js"></script>
   <script src="tools.js"></script>
   <script src="panel.js"></script>

@@ -14,13 +14,25 @@
   ];
   const MAX_CONVERSATIONS = 200;
   const MAX_TOOL_ROUNDS = 15;
-  const MAX_IMAGES = 4;
-  const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 6 };
+  const MAX_ATTACHMENTS = 6;
+  const MAX_PDF_BYTES = 20 * 1024 * 1024;
+  const MAX_TEXT_BYTES = 200 * 1024;
+  const TEXT_FILE = /\.(txt|md|markdown|csv|tsv|json|xml|html?|css|js|ts|py|ya?ml|toml|ini|log|rtf|tex|bib)$/i;
+  const WEB_SEARCH_TOOL = { type: "web_search_20250305", name: "web_search", max_uses: 5 };
+  const REGIONS = {
+    ch: "Switzerland (prices in CHF; prefer Swiss shops such as Galaxus, Digitec, Brack, Interdiscount, or shops that deliver to Switzerland)",
+    de: "Germany (prices in EUR; German shops)",
+    at: "Austria (prices in EUR; Austrian shops or shops that deliver to Austria)",
+    eu: "Europe (prices in EUR; shops that deliver within the EU)"
+  };
+  /* Blendet in Zen/Firefox die Kopfzeile ("Claude ⌄ ✕") nur für diese Sidebar aus. */
+  const HEADER_CSS = '#sidebar-box[sidebarcommand="claude-sidebar_louis_local-sidebar-action"] #sidebar-header { display: none !important; }';
   /* context: "page" = aktuelle Seite erzwingen, "none" = ohne Seite. fill = nur ins Eingabefeld schreiben. */
   const COMMANDS = [
     { key: "summary", context: "page" },
     { key: "research", fill: true, context: "none" },
-    { key: "compare", context: "none" },
+    { key: "compare" },
+    { key: "price", context: "page" },
     { key: "find" },
     { key: "cleanup", context: "none" },
     { key: "sort", context: "none" },
@@ -35,7 +47,8 @@
   const ui = {};
   [
     "chatView", "historyView", "settingsView", "messageList", "emptyState", "summarizeButton", "compareButton", "overviewButton",
-    "newChatButton", "historyButton", "cleanupButton", "settingsButton", "historyList",
+    "newChatButton", "historyButton", "cleanupButton", "settingsButton", "historyList", "priceButton",
+    "uploadButton", "fileInput", "screenshotButton", "regionSelect", "shortcutLabel", "shortcutButton", "copyCssButton",
     "settingsSaved", "settingsNotice", "apiKeyInput", "toggleKeyButton", "defaultModelSelect", "defaultEffortSelect", "customModelInput",
     "languageSelect", "appearanceSelect", "backgroundModeSelect", "backgroundColorInput",
     "webSearchCheckbox", "confirmChangesCheckbox", "profileInput", "customCommandsInput", "clearHistoryButton", "versionLabel",
@@ -54,6 +67,7 @@
       background: "auto", // "auto" oder "#rrggbb"
       confirmChanges: true,
       webSearch: true,
+      region: "ch",
       profile: "",
       customCommands: ""
     },
@@ -65,7 +79,7 @@
     includePage: true,
     activeTab: null,
     extraTabs: new Map(), // tabId -> title
-    images: [], // { data (base64 JPEG), thumb (data-URL) }
+    attachments: [], // { kind: "image", data, thumb, name } | { kind: "pdf", data, name, size } | { kind: "text", text, name, size }
     selection: "",
     lastActionTime: 0,
     busy: false,
@@ -293,6 +307,12 @@
         });
         wrapper.appendChild(row);
       }
+      if (message.files && message.files.length) {
+        const row = document.createElement("div");
+        row.className = "message-files";
+        message.files.forEach((file) => row.appendChild(fileBadge(file)));
+        wrapper.appendChild(row);
+      }
       wrapper.appendChild(document.createTextNode(message.text));
       if (message.contexts && message.contexts.length) {
         const context = document.createElement("div");
@@ -427,7 +447,7 @@
     if (force || isNearBottom()) ui.chatView.scrollTop = ui.chatView.scrollHeight;
   }
 
-  async function copyText(text, button) {
+  async function copyText(text, button, labelKey = "msg.copy") {
     try {
       await navigator.clipboard.writeText(text);
     } catch (_) {
@@ -439,7 +459,7 @@
       helper.remove();
     }
     button.textContent = t("msg.copied");
-    setTimeout(() => (button.textContent = t("msg.copy")), 1200);
+    setTimeout(() => (button.textContent = t(labelKey)), 1200);
   }
 
   /* ---------- Kontext: aktuelle Seite, weitere Tabs, Bilder, Auswahl ---------- */
@@ -460,6 +480,28 @@
     chip.append(...children, remove);
     chip.addEventListener("click", onClick);
     return chip;
+  }
+
+  const FILE_ICONS = {
+    pdf: '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>',
+    text: '<svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 12h6M9 15h6M9 18h3"/></svg>'
+  };
+
+  function fileIcon(kind) {
+    const icon = document.createElement("span");
+    icon.className = "file-icon";
+    icon.innerHTML = FILE_ICONS[kind] || FILE_ICONS.text; // feste SVGs, kein Nutzerinhalt
+    return icon;
+  }
+
+  function fileBadge(file) {
+    const badge = document.createElement("span");
+    badge.className = "file-badge";
+    const name = document.createElement("span");
+    name.className = "chip-label";
+    name.textContent = file.name;
+    badge.append(fileIcon(file.kind), name);
+    return badge;
   }
 
   function chipLabel(text) {
@@ -483,16 +525,19 @@
         renderContextChips();
       })
     );
-    state.images.forEach((image, index) => {
-      const preview = document.createElement("img");
-      preview.src = image.thumb;
-      preview.alt = "";
-      chips.push(
-        buildChip("chip chip-tab chip-image", t("chip.removeImage"), [preview], () => {
-          state.images.splice(index, 1);
-          renderContextChips();
-        })
-      );
+    state.attachments.forEach((attachment, index) => {
+      const remove = () => {
+        state.attachments.splice(index, 1);
+        renderContextChips();
+      };
+      if (attachment.kind === "image") {
+        const preview = document.createElement("img");
+        preview.src = attachment.thumb;
+        preview.alt = "";
+        chips.push(buildChip("chip chip-tab chip-image", t("chip.removeAttachment", { name: attachment.name }), [preview], remove));
+      } else {
+        chips.push(buildChip("chip chip-tab chip-file", t("chip.removeAttachment", { name: attachment.name }), [fileIcon(attachment.kind), chipLabel(attachment.name)], remove));
+      }
     });
     if (state.selection) {
       chips.push(
@@ -599,6 +644,7 @@
   function buildSystemPrompt() {
     const languageName = I18n.language === "de" ? "German" : "English";
     let system = `${ClaudeApi.SYSTEM_PROMPT}\n\nThe interface language is ${languageName}. Use it when the user's own language is unclear and for short notes about tab actions.`;
+    system += `\nThe user's shopping region: ${REGIONS[state.settings.region] || REGIONS.ch}. Today is ${new Date().toISOString().slice(0, 10)}.`;
     const profile = (state.settings.profile || "").trim();
     if (profile) {
       system += `\n\nThe user wrote this about themselves and how they want answers. Follow it where it applies:\n<user_profile>\n${profile.slice(0, 6000)}\n</user_profile>`;
@@ -748,23 +794,28 @@
 
     let conversation = currentConversation();
     if (!conversation) {
-      const title = pages[0] && options.forcePage ? t("history.summaryTitle", { title: pages[0].title }) : text;
+      const label = options.display || text;
+      const title = pages[0] && options.display ? `${label}: ${pages[0].title}` : label;
       conversation = createConversation(title);
     }
     conversation.model = state.currentModel;
 
     const documents = pages.length ? TabTools.buildDocumentsBlock(pages) : "";
-    const images = contextError ? [] : state.images;
+    const attachments = contextError ? [] : state.attachments;
     const selection = contextError ? "" : state.selection;
     if (!contextError) {
-      state.images = [];
+      state.attachments = [];
       state.selection = "";
       renderContextChips();
     }
+    const images = attachments.filter((attachment) => attachment.kind === "image");
+    const files = attachments.filter((attachment) => attachment.kind !== "image");
     const contexts = pages.map((page) => ({ title: page.title, url: page.url }));
     if (selection) contexts.push({ title: t("msg.selection") });
-    const userMessage = { role: "user", text, contexts };
+    /* display: kurzer Text für die Sprechblase (z. B. „/vergleichen“), text geht an Claude */
+    const userMessage = { role: "user", text: options.display || text, contexts };
     if (images.length) userMessage.images = images.map((image) => image.thumb);
+    if (files.length) userMessage.files = files.map((file) => ({ name: file.name, kind: file.kind }));
     const assistantMessage = { role: "assistant", parts: [], streaming: true };
     conversation.messages.push(userMessage, assistantMessage);
     conversation.updatedAt = Date.now();
@@ -799,8 +850,12 @@
     const snapshotLength = conversation.apiMessages.length;
     const selectionBlock = selection ? `<selected_text>\n${selection}\n</selected_text>` : "";
     const apiText = [documents, selectionBlock, text].filter(Boolean).join("\n\n");
-    const imageBlocks = images.map((image) => ({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: image.data } }));
-    conversation.apiMessages.push({ role: "user", content: imageBlocks.length ? imageBlocks.concat([{ type: "text", text: apiText }]) : apiText });
+    const attachmentBlocks = attachments.map((attachment) => {
+      if (attachment.kind === "image") return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: attachment.data } };
+      if (attachment.kind === "pdf") return { type: "document", source: { type: "base64", media_type: "application/pdf", data: attachment.data }, title: attachment.name.slice(0, 200) };
+      return { type: "text", text: `<file name="${attachment.name.replace(/"/g, "'")}">\n${attachment.text}\n</file>` };
+    });
+    conversation.apiMessages.push({ role: "user", content: attachmentBlocks.length ? attachmentBlocks.concat([{ type: "text", text: apiText }]) : apiText });
     const usage = { inputTokens: 0, outputTokens: 0 };
     state.abortController = new AbortController();
     try {
@@ -840,7 +895,7 @@
     ui.sendButton.classList.toggle("is-busy", busy);
     ui.sendButton.title = t(busy ? "input.stop" : "input.send");
     ui.sendButton.setAttribute("aria-label", ui.sendButton.title);
-    for (const button of [ui.summarizeButton, ui.overviewButton, ui.compareButton, ui.cleanupButton]) button.disabled = busy;
+    for (const button of [ui.summarizeButton, ui.overviewButton, ui.compareButton, ui.priceButton, ui.cleanupButton]) button.disabled = busy;
   }
 
   const formatNumber = (value) => new Intl.NumberFormat(I18n.language === "de" ? "de-CH" : "en").format(value || 0);
@@ -858,7 +913,7 @@
     fillModelSelect(ui.modelSelect, state.currentModel);
     fillEffortSelect(ui.effortSelect, state.currentEffort);
     state.extraTabs.clear();
-    state.images = [];
+    state.attachments = [];
     state.selection = "";
     state.includePage = true;
     ui.usageLabel.textContent = "";
@@ -939,6 +994,8 @@
     if (customBackground) ui.backgroundColorInput.value = settings.background;
     ui.confirmChangesCheckbox.checked = settings.confirmChanges !== false;
     ui.webSearchCheckbox.checked = settings.webSearch !== false;
+    ui.regionSelect.value = REGIONS[settings.region] ? settings.region : "ch";
+    renderShortcut();
     ui.profileInput.value = settings.profile || "";
     ui.customCommandsInput.value = settings.customCommands || "";
     ui.versionLabel.textContent = `Claude Sidebar ${browser.runtime && browser.runtime.getManifest ? browser.runtime.getManifest().version : ""}`;
@@ -958,6 +1015,7 @@
     settings.background = ui.backgroundModeSelect.value === "custom" ? ui.backgroundColorInput.value : "auto";
     settings.confirmChanges = ui.confirmChangesCheckbox.checked;
     settings.webSearch = ui.webSearchCheckbox.checked;
+    settings.region = ui.regionSelect.value;
     settings.profile = ui.profileInput.value.trim();
     settings.customCommands = ui.customCommandsInput.value.trim();
     await saveSettings();
@@ -975,6 +1033,20 @@
     ui.settingsSaved.textContent = t("settings.saved");
     clearTimeout(savedTimer);
     savedTimer = setTimeout(() => (ui.settingsSaved.textContent = ""), 1500);
+  }
+
+  /* Tastenkürzel zum Ein- und Ausblenden der Sidebar */
+  async function renderShortcut() {
+    let shortcut = "";
+    try {
+      const commands = await browser.commands.getAll();
+      const command = commands.find((entry) => entry.name === "_execute_sidebar_action");
+      shortcut = command && command.shortcut ? command.shortcut : "";
+    } catch (_) {
+      shortcut = "";
+    }
+    ui.shortcutLabel.textContent = shortcut ? shortcut.replace(/\+/g, " + ") : t("settings.noShortcut");
+    ui.shortcutButton.hidden = !(browser.commands && typeof browser.commands.openShortcutSettings === "function");
   }
 
   let clearConfirmTimer = null;
@@ -1017,6 +1089,7 @@
 
   function runCommand(command, extra) {
     const options = command.context === "page" ? { forcePage: true } : command.context === "none" ? { noPage: true } : {};
+    options.display = `/${command.name}${extra ? ` ${extra}` : ""}`;
     sendMessage(extra ? `${command.prompt} ${extra}` : command.prompt, options);
   }
 
@@ -1147,16 +1220,20 @@
     throw lastError;
   }
 
+  function roomForAttachment() {
+    if (state.attachments.length < MAX_ATTACHMENTS) return true;
+    flash(t("flash.maxAttachments", { count: MAX_ATTACHMENTS }));
+    return false;
+  }
+
   /* Nimmt eine Datei oder eine Bild-URL, verkleinert sie und hängt sie an die nächste Nachricht. */
-  async function addImage(source) {
-    if (state.images.length >= MAX_IMAGES) {
-      flash(t("flash.maxImages", { count: MAX_IMAGES }));
-      return false;
-    }
+  async function addImage(source, name) {
+    if (!roomForAttachment()) return false;
     try {
       const bitmap = await loadBitmap(source);
       const full = drawToJpeg(bitmap, 1568, 0.85);
-      state.images.push({ data: full.split(",")[1], thumb: drawToJpeg(bitmap, 160, 0.7) });
+      const fallbackName = typeof source === "string" && /^https?:/.test(source) ? source.split(/[?#]/)[0].split("/").pop() : t("chip.image");
+      state.attachments.push({ kind: "image", data: full.split(",")[1], thumb: drawToJpeg(bitmap, 160, 0.7), name: name || (source && source.name) || fallbackName || t("chip.image") });
       renderContextChips();
       return true;
     } catch (_) {
@@ -1164,8 +1241,71 @@
     }
   }
 
+  const readAsDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+
+  const isSupportedFile = (file) => file.type.startsWith("image/") || file.type === "application/pdf" || /\.pdf$/i.test(file.name) || file.type.startsWith("text/") || TEXT_FILE.test(file.name);
+
+  /* Bilder, PDFs und Textdateien (Upload-Knopf, Reinziehen, Einfügen). */
+  async function addFile(file) {
+    if (file.type.startsWith("image/")) {
+      if (await addImage(file, file.name)) return true;
+      flash(t("flash.imageFailed"));
+      return false;
+    }
+    if (!roomForAttachment()) return false;
+    try {
+      if (file.type === "application/pdf" || /\.pdf$/i.test(file.name)) {
+        if (file.size > MAX_PDF_BYTES) {
+          flash(t("flash.fileTooBig", { name: file.name, size: "20 MB" }));
+          return false;
+        }
+        const dataUrl = await readAsDataUrl(file);
+        state.attachments.push({ kind: "pdf", data: String(dataUrl).split(",")[1], name: file.name, size: file.size });
+      } else if (file.type.startsWith("text/") || TEXT_FILE.test(file.name)) {
+        if (file.size > MAX_TEXT_BYTES) {
+          flash(t("flash.fileTooBig", { name: file.name, size: "200 KB" }));
+          return false;
+        }
+        state.attachments.push({ kind: "text", text: await file.text(), name: file.name, size: file.size });
+      } else {
+        flash(t("flash.unsupported", { name: file.name }));
+        return false;
+      }
+      renderContextChips();
+      return true;
+    } catch (_) {
+      flash(t("flash.fileFailed", { name: file.name }));
+      return false;
+    }
+  }
+
+  async function addFiles(files) {
+    let added = 0;
+    for (const file of files) if (await addFile(file)) added++;
+    return added;
+  }
+
+  /* Screenshot des sichtbaren Bereichs der aktuellen Seite */
+  async function addScreenshot() {
+    try {
+      const tab = state.activeTab;
+      const dataUrl = await browser.tabs.captureVisibleTab(tab ? tab.windowId : undefined, { format: "jpeg", quality: 85 });
+      const title = tab && tab.title ? tab.title.slice(0, 40) : "";
+      if (!(await addImage(dataUrl, title ? t("chip.screenshotOf", { title }) : t("chip.screenshot")))) flash(t("flash.screenshotFailed"));
+    } catch (_) {
+      flash(t("flash.screenshotFailed"));
+    }
+    ui.promptInput.focus();
+  }
+
   function imageSourcesFromTransfer(transfer) {
-    const files = [...transfer.files].filter((file) => file.type.startsWith("image/"));
+    const files = [...transfer.files].filter(isSupportedFile);
     if (files.length) return files;
     const html = transfer.getData("text/html");
     if (html) {
@@ -1180,14 +1320,13 @@
   async function handlePaste(event) {
     const transfer = event.clipboardData;
     if (!transfer) return;
-    const files = [...transfer.files].filter((file) => file.type.startsWith("image/"));
+    const files = [...transfer.files].filter(isSupportedFile);
     const text = (transfer.getData("text/plain") || "").trim();
     const isImageLink = /^https?:\/\/\S+\.(png|jpe?g|webp|gif|avif)(\?\S*)?$/i.test(text);
     if (!files.length && !isImageLink) return;
     event.preventDefault();
-    for (const source of files.length ? files : [text]) {
-      if (!(await addImage(source))) flash(t("flash.imageFailed"));
-    }
+    if (files.length) await addFiles(files);
+    else if (!(await addImage(text))) flash(t("flash.imageFailed"));
   }
 
   /* ---------- Rechtsklick-Menü (kommt vom Hintergrundskript) ---------- */
@@ -1222,13 +1361,24 @@
     ui.settingsButton.addEventListener("click", () => showView(ui.settingsView.hidden ? "settingsView" : "chatView"));
     ui.cleanupButton.addEventListener("click", () => {
       showView("chatView");
-      sendMessage(prompt("cleanup"), { noPage: true });
+      sendMessage(prompt("cleanup"), { noPage: true, display: `/${t("command.cleanup")}` });
     });
     document.querySelectorAll("[data-close-view]").forEach((button) => button.addEventListener("click", () => showView("chatView")));
 
-    ui.summarizeButton.addEventListener("click", () => sendMessage(prompt("summary"), { forcePage: true }));
-    ui.overviewButton.addEventListener("click", () => sendMessage(prompt("overview"), { noPage: true }));
-    ui.compareButton.addEventListener("click", () => sendMessage(prompt("compare"), { noPage: true }));
+    ui.summarizeButton.addEventListener("click", () => sendMessage(prompt("summary"), { forcePage: true, display: t("empty.summarize") }));
+    ui.overviewButton.addEventListener("click", () => sendMessage(prompt("overview"), { noPage: true, display: t("empty.overview") }));
+    ui.compareButton.addEventListener("click", () => sendMessage(prompt("compare"), { display: t("empty.compare") }));
+    ui.priceButton.addEventListener("click", () => sendMessage(prompt("price"), { forcePage: true, display: t("empty.price") }));
+
+    /* Anhänge: Upload-Knopf und Screenshot */
+    ui.uploadButton.addEventListener("click", () => ui.fileInput.click());
+    ui.fileInput.addEventListener("change", async () => {
+      const files = [...ui.fileInput.files];
+      ui.fileInput.value = "";
+      if (files.length) await addFiles(files);
+      ui.promptInput.focus();
+    });
+    ui.screenshotButton.addEventListener("click", addScreenshot);
 
     ui.pageChip.addEventListener("click", () => {
       state.includePage = !state.includePage;
@@ -1305,11 +1455,15 @@
     });
     for (const control of [
       ui.apiKeyInput, ui.customModelInput, ui.defaultModelSelect, ui.defaultEffortSelect, ui.languageSelect, ui.appearanceSelect,
-      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.confirmChangesCheckbox, ui.profileInput, ui.customCommandsInput
+      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.regionSelect, ui.confirmChangesCheckbox, ui.profileInput, ui.customCommandsInput
     ]) {
       control.addEventListener("change", saveSettingsFromForm);
     }
     ui.clearHistoryButton.addEventListener("click", handleClearHistory);
+    ui.shortcutButton.addEventListener("click", () => {
+      if (browser.commands && typeof browser.commands.openShortcutSettings === "function") browser.commands.openShortcutSettings();
+    });
+    ui.copyCssButton.addEventListener("click", () => copyText(HEADER_CSS, ui.copyCssButton, "settings.copyCss"));
 
     browser.tabs.onActivated.addListener(refreshActiveTab);
     browser.tabs.onUpdated.addListener((tabId, changeInfo) => {
@@ -1356,8 +1510,8 @@
         if (ui.composer.hidden) return;
         const dropped = imageSourcesFromTransfer(event.dataTransfer);
         let added = 0;
-        for (const source of dropped) if (await addImage(source)) added++;
-        if (!added) flash(t("flash.noImage"));
+        for (const source of dropped) if (typeof source === "string" ? await addImage(source) : await addFile(source)) added++;
+        if (!added && !dropped.length) flash(t("flash.noImage"));
         ui.promptInput.focus();
       },
       true
@@ -1371,12 +1525,14 @@
   function submitPrompt() {
     if (state.busy) return;
     const text = ui.promptInput.value.trim();
-    if (!text && !state.images.length) return;
+    if (!text && !state.attachments.length) return;
     ui.promptInput.value = "";
     autoGrow();
     hideSuggest();
     if (!text) {
-      sendMessage(prompt("find")); // nur ein Bild: Produkt suchen
+      /* Nur Anhang: bei Bildern Produkt suchen, sonst Inhalt zusammenfassen */
+      const onlyImages = state.attachments.every((attachment) => attachment.kind === "image");
+      sendMessage(prompt(onlyImages ? "find" : "attachment"), onlyImages ? {} : { noPage: true });
       return;
     }
     const match = text.match(/^\/(\S+)(?:\s+([\s\S]*))?$/);

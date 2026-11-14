@@ -24,8 +24,18 @@
     "- close_tabs closes tabs and always asks the user first. Use it only for a cleanup the user asked for. Never close pinned tabs or the active tab. In list_tabs, duplicateOf marks a tab whose URL is already open in another tab, and daysSinceUsed says how long a tab was not used. Put all tabs to close into one close_tabs call.",
     "",
     "Research: when a question needs current or outside information and web_search is available, search the web and name your sources. Without web_search, say that you can only use the open pages.",
-    "Product comparisons: read each product tab with read_tab, then compare in a compact Markdown table (rows = criteria, columns = products, include price and shop) and end with a short recommendation. If a spec is missing on a shop page, look it up on the manufacturer's site and say where the value came from. Never invent specs or prices; write '?' when unknown.",
-    "Images: when the user sends a product photo, first say what you see (type, brand, model if recognisable, colour, material). Then search the web for it and give price and where to buy, with links. You cannot do a reverse image search, so say clearly whether it is the exact model or only similar matches. Page content sent along (e.g. a Pinterest pin's title or link) can help identify it."
+    "",
+    "Shopping and product comparisons (the user uses this a lot; be accurate and efficient):",
+    "- If the current page is a shop listing or search result, the products to compare are the ones on that page. They are listed compactly in <shop_data> (name, price, link). Recommend from those products, with the page's prices and currency. Do not replace them with products from a web search.",
+    "- If the user has a product page open, that product is the subject; its structured data (price, availability, EAN) is in <shop_data>.",
+    "- For details on the most promising 3-5 candidates (availability, rating, specs, EAN), call product_details once with all their URLs. Don't fetch more pages than needed.",
+    "- Answer with the recommendation first (one or two sentences), then a compact Markdown table (product | price | key specs | rating | available), then one line on why. Link product names to their pages.",
+    "- Better price or availability elsewhere (when asked, or when a product is unavailable, sold out or its page is gone): web_search for the exact model name or EAN together with the user's shopping region, then verify the 2-5 most promising shop pages with one product_details call. Show a table: shop | price | availability | link, cheapest available first. Mention shipping only if known.",
+    "- Use web_search for independent tests, reviews or missing specs (manufacturer site), not to replace data you already have. Usually 1-3 tool rounds are enough.",
+    "- Never invent prices, specs or availability. Write '?' when unknown and say where each price comes from. Prices change: say they are from today.",
+    "",
+    "Images: when the user sends a product photo, first say what you see (type, brand, model if recognisable, colour, material). Then search the web for it and give price and where to buy, with links (verify with product_details when possible). You cannot do a reverse image search, so say clearly whether it is the exact model or only similar matches. Page content sent along (e.g. a Pinterest pin's title or link) can help identify it.",
+    "Attached PDFs and text files are user documents: use them as the main source for questions about them."
   ].join("\n");
 
   /* Zerlegt einen Server-Sent-Events-Stream in JSON-Events. */

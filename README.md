@@ -3,12 +3,14 @@
 Private Claude-Sidebar für Zen (und Firefox). Kein Server dazwischen: Anfragen gehen direkt vom Browser an die Anthropic-API, der Verlauf bleibt lokal im Browser-Profil.
 
 ## Funktionen
-- **Ein-/Ausblenden**: Toolbar-Button (Stern-Symbol) oder `Alt+Shift+C`.
+- **Ein-/Ausblenden**: `Alt+Shift+C` (änderbar in den Einstellungen bzw. `about:addons` → Zahnrad → Tastenkürzel verwalten). Kein Toolbar-Button.
+- **Kopfzeile „Claude ⌄ ✕“ ausblenden**: gehört zu Zen. Einstellungen → Seitenleiste → „CSS kopieren“, in `chrome/userChrome.css` im Zen-Profil einfügen, Zen neu starten.
 - **Befehle mit `/`**: `/zusammenfassen`, `/recherche`, `/vergleichen`, `/finden`, `/aufräumen`, `/sortieren`, `/übersicht`, `/erklären`, `/übersetzen`. Eigene Befehle in den Einstellungen (`name: Prompt`).
 - **Tabs mit `@`** dazunehmen, oder über „+ Tabs“. Die aktuelle Seite geht über den Chip „Diese Seite“ mit.
 - **Recherche**: Claude sucht selbst im Web (abschaltbar) und listet die Quellen.
-- **Produktvergleich**: liest die Produkt-Tabs und baut eine Vergleichstabelle; fehlende Angaben sucht es beim Hersteller.
-- **Bilder**: reinziehen, einfügen (auch Bild-Links) oder Rechtsklick auf ein Bild → „Produkt finden“. Nur Bild + Enter startet die Produktsuche. Claude erkennt das Produkt am Aussehen und sucht per Text; eine echte Rückwärts-Bildsuche ist es nicht.
+- **Produktvergleich**: Auf einer Shop-Liste oder Suche (z. B. Galaxus) liest die Sidebar die Produktkarten kompakt aus (Name, Preis, Link) und Claude vergleicht genau diese Produkte. Details holt `product_details` im Hintergrund aus den Produktseiten (JSON-LD: Preis, Verfügbarkeit, EAN, Bewertung), ohne Tabs zu öffnen. Ohne Liste vergleicht es die Produkt-Tabs.
+- **Günstiger finden** (`/preis`): sucht das Produkt der aktuellen Seite per Modell/EAN in anderen Shops und prüft Preis und Verfügbarkeit direkt auf deren Produktseiten. Region in den Einstellungen (Schweiz, Deutschland, Österreich, Europa).
+- **Anhänge**: Büroklammer (Bilder, PDFs, Textdateien), Screenshot der aktuellen Seite, reinziehen oder einfügen (auch Bild-Links), Rechtsklick auf ein Bild → „Produkt finden“. Nur Bild + Enter startet die Produktsuche, nur Datei + Enter fasst sie zusammen. Eine echte Rückwärts-Bildsuche ist es nicht.
 - **Rechtsklick auf markierten Text**: Erklären, Übersetzen, Umschreiben, Im Chat fragen.
 - **Tabs und Ordner**: lesen, in Ordner sortieren, umbenennen, verschieben. „Aufräumen“ schlägt zusätzlich Duplikate und lange unbenutzte Tabs zum Schliessen vor. Schliessen fragt immer nach; angepinnte Tabs werden nie geschlossen.
 - **Einstellungen**: Sprache (Deutsch/English), Aussehen, Hintergrundfarbe (folgt dem Browser-Theme oder eigene Farbe), Standard-Modell und Stufe (Niedrig/Mittel/Hoch). Änderungen speichern sich sofort.
@@ -48,7 +50,8 @@ Zum Testen ohne Installation: `about:debugging#/runtime/this-firefox` → „Tem
 - `sidebar/i18n.js` – Texte in Deutsch und Englisch
 - `sidebar/api.js` – Anthropic-API mit Streaming
 - `sidebar/tabs.js` – Seiten auslesen
-- `sidebar/tools.js` – Werkzeuge für Tabs und Ordner
+- `sidebar/tools.js` – Werkzeuge für Tabs, Ordner und Produktseiten
+- `sidebar/shop.js` – Produktdaten kompakt auslesen (JSON-LD, Produktkarten, technische Daten)
 - `background.js` – Toolbar-Button und Rechtsklick-Menü
 - `updates.json` – Update-Liste für Zen (wird von der Action gepflegt)
 - `.github/workflows/release.yml` – automatisches Signieren und Veröffentlichen

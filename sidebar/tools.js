@@ -29,6 +29,18 @@
       }
     },
     {
+      name: "product_details",
+      description:
+        "Fetch up to 6 product pages (shop or manufacturer) in the background, without opening tabs, and get compact data: name, brand, EAN/GTIN, price, currency, availability, rating, offers, specs when the page has them. Cheap: use it to verify prices and availability, to compare candidates from a product list, or to check a shop found by web search. Put all URLs into one call.",
+      input_schema: {
+        type: "object",
+        properties: {
+          urls: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6 }
+        },
+        required: ["urls"]
+      }
+    },
+    {
       name: "focus_tab",
       description: "Switch to a tab so the user sees it.",
       input_schema: {
@@ -203,13 +215,27 @@
   async function readTab(input) {
     const [tab] = await requireTabs([input.tabId]);
     const page = await TabTools.extractTab(tab);
-    const truncated = page.text.length > READ_TAB_MAX_CHARS;
-    return {
+    const shop = root.ShopTools && page.shop ? root.ShopTools.formatShopData(page.shop) : "";
+    /* Produktliste: kurzer Text reicht, die Produkte stehen in shop_data. */
+    const limit = page.shop && page.shop.cards && page.shop.cards.length ? 6000 : READ_TAB_MAX_CHARS;
+    const text = page.text || "";
+    const result = {
       title: page.title,
       url: page.url,
-      text: page.text.slice(0, READ_TAB_MAX_CHARS) + (truncated ? "\n[… gekürzt]" : ""),
+      text: text.slice(0, limit) + (text.length > limit ? "\n[… gekürzt]" : ""),
       _label: L("tool.read", { title: tab.title || tab.url })
     };
+    if (shop) result.shop_data = shop;
+    return result;
+  }
+
+  async function productDetails(input) {
+    if (!root.ShopTools) throw new Error("Shop tools not loaded.");
+    const urls = Array.isArray(input.urls) ? input.urls : [];
+    if (!urls.length) throw new Error("urls fehlt.");
+    const results = await root.ShopTools.productDetailsMany(urls);
+    const ok = results.filter((entry) => !entry.error).length;
+    return { results, _label: L("tool.products", { count: ok, total: results.length }) };
   }
 
   async function focusTab(input) {
@@ -283,6 +309,7 @@
   const HANDLERS = {
     list_tabs: listTabs,
     read_tab: readTab,
+    product_details: productDetails,
     focus_tab: focusTab,
     move_tabs: moveTabs,
     group_tabs: groupTabs,
