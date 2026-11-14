@@ -3,8 +3,10 @@
 Private Claude-Sidebar für Zen (und Firefox). Kein Server dazwischen: Anfragen gehen direkt vom Browser an die Anthropic-API, der Verlauf bleibt lokal im Browser-Profil.
 
 ## Funktionen
-- **Ein-/Ausblenden**: `Alt+Shift+C` (änderbar in den Einstellungen bzw. `about:addons` → Zahnrad → Tastenkürzel verwalten). Kein Toolbar-Button.
-- **Kopfzeile „Claude ⌄ ✕“ ausblenden**: gehört zu Zen. Einstellungen → Seitenleiste → „CSS kopieren“, in `chrome/userChrome.css` im Zen-Profil einfügen, Zen neu starten.
+- **Schwebendes Fenster** (Standard): liegt durchsichtig (Glas mit Unschärfe) über der Webseite, verschiebbar am Griff oben, Grösse an der Ecke unten links. Eingeklappt bleibt nur das Claude-Logo unten rechts. Offen/zu, Position und Grösse gelten für alle Tabs. Auf internen Seiten (neuer Tab, about:, AMO) öffnet sich stattdessen die Seitenleiste.
+- **Ein-/Ausblenden**: `Alt+Shift+C`, Logo anklicken oder „–“ oben im Fenster. Kein Toolbar-Button.
+- **Seitenleiste** statt schwebend: Einstellungen → Fenster → Anzeige. Deren Kopfzeile „Claude ⌄ ✕“ gehört zu Zen; ausblenden mit „CSS kopieren“ → `chrome/userChrome.css` im Zen-Profil.
+- **Mehrere Tabs auswählen** (Cmd-/Shift-Klick): Chip „N ausgewählte Tabs“; Vergleichen, Sortieren und Aufräumen gelten dann nur für diese.
 - **Befehle mit `/`**: `/zusammenfassen`, `/recherche`, `/vergleichen`, `/finden`, `/aufräumen`, `/sortieren`, `/übersicht`, `/erklären`, `/übersetzen`. Eigene Befehle in den Einstellungen (`name: Prompt`).
 - **Tabs mit `@`** dazunehmen, oder über „+ Tabs“. Die aktuelle Seite geht über den Chip „Diese Seite“ mit.
 - **Recherche**: Claude sucht selbst im Web (abschaltbar) und listet die Quellen.
@@ -52,7 +54,8 @@ Zum Testen ohne Installation: `about:debugging#/runtime/this-firefox` → „Tem
 - `sidebar/tabs.js` – Seiten auslesen
 - `sidebar/tools.js` – Werkzeuge für Tabs, Ordner und Produktseiten
 - `sidebar/shop.js` – Produktdaten kompakt auslesen (JSON-LD, Produktkarten, technische Daten)
-- `background.js` – Toolbar-Button und Rechtsklick-Menü
+- `background.js` – Tastenkürzel, Rechtsklick-Menü, Auto-Update
+- `content/float.js` – schwebendes Fenster über der Webseite
 - `updates.json` – Update-Liste für Zen (wird von der Action gepflegt)
 - `.github/workflows/release.yml` – automatisches Signieren und Veröffentlichen
 - `sidebar/markdown.js` – sicherer Markdown-Renderer

@@ -18,6 +18,9 @@
     <button class="icon-button" id="cleanupButton" data-i18n-title="ui.cleanup">
       <svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>
     </button>
+    <button class="icon-button" id="collapseButton" data-i18n-title="ui.collapse" hidden>
+      <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+    </button>
     <button class="icon-button" id="settingsButton" data-i18n-title="ui.settings">
       <svg viewBox="0 0 24 24"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
     </button>
@@ -132,6 +135,14 @@
 
     <h3 data-i18n="settings.sidebar"></h3>
     <div class="group">
+      <label class="row">
+        <span data-i18n="settings.windowMode"></span>
+        <select id="windowModeSelect">
+          <option value="float" data-i18n="settings.windowFloat"></option>
+          <option value="sidebar" data-i18n="settings.windowSidebar"></option>
+        </select>
+      </label>
+      <small class="hint" data-i18n="settings.windowHint"></small>
       <div class="row">
         <span data-i18n="settings.shortcut"></span>
         <span class="row-controls">
@@ -140,11 +151,11 @@
         </span>
       </div>
       <small class="hint" data-i18n="settings.shortcutHint"></small>
-      <div class="row">
+      <div class="row" id="headerRow">
         <span data-i18n="settings.header"></span>
         <button class="text-button" id="copyCssButton" type="button" data-i18n="settings.copyCss"></button>
       </div>
-      <small class="hint" data-i18n="settings.headerHint"></small>
+      <small class="hint" id="headerHint" data-i18n="settings.headerHint"></small>
     </div>
 
     <h3 data-i18n="settings.personal"></h3>

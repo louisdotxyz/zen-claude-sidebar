@@ -1,4 +1,42 @@
-/* Ein- und Ausblenden läuft über das Tastenkürzel (_execute_sidebar_action), ohne Toolbar-Button. */
+/* Ein- und Ausblenden: Tastenkürzel "toggle-claude". Im Modus "Schwebend" öffnet es das Fenster über der Webseite,
+   sonst (oder auf internen Seiten, wo kein Content-Script läuft) die Seitenleiste.
+   sidebarAction.toggle() muss synchron im Kürzel-Handler laufen, darum werden Modus und Tab-URL vorab gemerkt. */
+let windowMode = "float";
+let activeTabUrl = "";
+const isScriptable = (url) => /^(https?|file):/i.test(url || "") && !/^https:\/\/(addons\.mozilla\.org|accounts\.firefox\.com)\//i.test(url || "");
+
+async function refreshActiveUrl() {
+  try {
+    const [tab] = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+    activeTabUrl = (tab && tab.url) || "";
+  } catch (_) {
+    activeTabUrl = "";
+  }
+}
+browser.tabs.onActivated.addListener(refreshActiveUrl);
+browser.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url && tab.active) activeTabUrl = changeInfo.url;
+});
+browser.windows.onFocusChanged.addListener(refreshActiveUrl);
+browser.storage.local.get("settings").then(({ settings }) => {
+  windowMode = settings && settings.windowMode === "sidebar" ? "sidebar" : "float";
+});
+refreshActiveUrl();
+
+async function setFloatOpen(open) {
+  const { floatState } = await browser.storage.local.get("floatState");
+  const current = floatState || {};
+  await browser.storage.local.set({ floatState: Object.assign({}, current, { open: open === "toggle" ? !current.open : open }) });
+}
+
+browser.commands.onCommand.addListener((name) => {
+  if (name !== "toggle-claude") return;
+  if (windowMode === "sidebar" || !isScriptable(activeTabUrl)) {
+    browser.sidebarAction.toggle();
+    return;
+  }
+  setFloatOpen("toggle");
+});
 
 /* Auto-Update: alle 6 Stunden nachfragen (Firefox selbst nur etwa täglich).
    Ein gefundenes Update wird sofort installiert, ausser Claude schreibt gerade eine Antwort;
@@ -44,14 +82,18 @@ async function buildMenus() {
 
 buildMenus();
 browser.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes.settings) buildMenus();
+  if (area !== "local" || !changes.settings) return;
+  const settings = changes.settings.newValue || {};
+  windowMode = settings.windowMode === "sidebar" ? "sidebar" : "float";
+  buildMenus();
 });
 
-browser.menus.onClicked.addListener((info) => {
+browser.menus.onClicked.addListener((info, tab) => {
   const kind = String(info.menuItemId).replace(/^claude-/, "");
   const contexts = MENU_ACTIONS[kind];
   if (!contexts) return;
-  browser.sidebarAction.open();
+  if (windowMode === "sidebar" || !isScriptable(tab && tab.url)) browser.sidebarAction.open();
+  else setFloatOpen(true);
   const isImage = contexts[0] === "image";
   browser.storage.local.set({
     pendingAction: {

@@ -1,6 +1,9 @@
 /* Claude Sidebar – Logik des Panels */
 (() => {
   const t = I18n.t;
+  /* Schwebendes Fenster (iframe über der Webseite) statt Seitenleiste */
+  const FLOAT = new URLSearchParams(location.search).get("mode") === "float";
+  if (FLOAT) document.documentElement.classList.add("is-float");
   const MODELS = [
     { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },
     { id: "claude-opus-5-5", label: "Opus 5.5" },
@@ -61,7 +64,8 @@
     "languageSelect", "appearanceSelect", "backgroundModeSelect", "backgroundColorInput",
     "webSearchCheckbox", "confirmChangesCheckbox", "customCommandsInput", "clearHistoryButton", "versionLabel",
     "composer", "pageChip", "pageChipLabel", "extraTabChips", "addTabsButton", "tabPicker", "tabPickerSearch", "tabPickerList",
-    "suggestBox", "dropOverlay", "promptInput", "sendButton", "modelSelect", "effortSelect", "usageLabel"
+    "suggestBox", "dropOverlay", "promptInput", "sendButton", "modelSelect", "effortSelect", "usageLabel",
+    "collapseButton", "windowModeSelect", "headerRow", "headerHint"
   ].forEach((id) => (ui[id] = element(id)));
 
   const state = {
@@ -75,6 +79,7 @@
       confirmChanges: true,
       webSearch: true,
       region: "ch",
+      windowMode: "float",
       customCommands: ""
     },
     conversations: [],
@@ -136,10 +141,47 @@
     state.currentEffort = state.settings.effort || "";
   }
 
-  async function saveConversations() {
+  /* Kennung der Chat-Liste, um eigene Speicherungen von denen anderer Tabs zu unterscheiden */
+  const conversationsSignature = (list) => (list || []).map((entry) => `${entry.id}:${entry.updatedAt}`).join("|");
+
+  async function saveConversations({ replace = false } = {}) {
+    if (!replace) {
+      /* Schwebende Fenster in mehreren Tabs: neuere Chats aus dem Speicher behalten */
+      const { conversations: latest } = await browser.storage.local.get("conversations");
+      const byId = new Map();
+      for (const entry of Array.isArray(latest) ? latest : []) byId.set(entry.id, entry);
+      for (const entry of state.conversations) {
+        const other = byId.get(entry.id);
+        if (!other || (entry.updatedAt || 0) >= (other.updatedAt || 0)) byId.set(entry.id, entry);
+      }
+      state.conversations = [...byId.values()].map(migrateConversation);
+    }
     state.conversations.sort((a, b) => b.updatedAt - a.updatedAt);
     state.conversations = state.conversations.slice(0, MAX_CONVERSATIONS);
     await browser.storage.local.set({ conversations: state.conversations, currentId: state.currentId });
+  }
+
+  /* Änderungen aus anderen Tabs übernehmen (Chats, Verbrauch, Einstellungen) */
+  function syncFromStorage(changes) {
+    if (changes.usageStats && changes.usageStats.newValue) state.usageStats = Object.assign({ total: {}, months: {} }, changes.usageStats.newValue);
+    if (changes.settings && changes.settings.newValue && JSON.stringify(changes.settings.newValue) !== JSON.stringify(state.settings)) {
+      const before = { language: state.settings.language, appearance: state.settings.appearance, background: state.settings.background };
+      state.settings = Object.assign(state.settings, changes.settings.newValue);
+      if (before.appearance !== state.settings.appearance || before.background !== state.settings.background) applyAppearance();
+      if (before.language !== state.settings.language) applyLanguage();
+      else if (!ui.settingsView.hidden) renderSettings();
+    }
+    if (changes.conversations && !state.busy) {
+      const incoming = Array.isArray(changes.conversations.newValue) ? changes.conversations.newValue : [];
+      if (conversationsSignature(incoming) === conversationsSignature(state.conversations)) return;
+      const current = currentConversation();
+      const before = current ? current.updatedAt : null;
+      state.conversations = incoming.map(migrateConversation);
+      if (state.currentId && !findConversation(state.currentId)) state.currentId = null;
+      const after = currentConversation();
+      if ((after ? after.updatedAt : null) !== before) renderConversation();
+      if (!ui.historyView.hidden) renderHistory();
+    }
   }
 
   const saveSettings = () => browser.storage.local.set({ settings: state.settings });
@@ -233,6 +275,7 @@
       root.style.removeProperty("--background");
     }
     if (scheme === "light" || scheme === "dark") root.dataset.scheme = scheme;
+    if (FLOAT) browser.storage.local.set({ floatScheme: scheme === "light" || scheme === "dark" ? scheme : "light dark" });
     else delete root.dataset.scheme;
   }
 
@@ -1086,7 +1129,7 @@
           if (state.busy && state.currentId === conversation.id) return;
           state.conversations = state.conversations.filter((entry) => entry.id !== conversation.id);
           if (state.currentId === conversation.id) state.currentId = null;
-          await saveConversations();
+          await saveConversations({ replace: true });
           renderHistory();
           renderConversation();
         });
@@ -1113,6 +1156,8 @@
     ui.confirmChangesCheckbox.checked = settings.confirmChanges !== false;
     ui.webSearchCheckbox.checked = settings.webSearch !== false;
     ui.regionSelect.value = REGIONS[settings.region] ? settings.region : "ch";
+    ui.windowModeSelect.value = settings.windowMode === "sidebar" ? "sidebar" : "float";
+    ui.headerRow.hidden = ui.headerHint.hidden = ui.windowModeSelect.value !== "sidebar";
     renderShortcut();
     ui.customCommandsInput.value = settings.customCommands || "";
     ui.versionLabel.textContent = t("settings.version", { version: browser.runtime && browser.runtime.getManifest ? browser.runtime.getManifest().version : "" });
@@ -1133,6 +1178,8 @@
     settings.confirmChanges = ui.confirmChangesCheckbox.checked;
     settings.webSearch = ui.webSearchCheckbox.checked;
     settings.region = ui.regionSelect.value;
+    settings.windowMode = ui.windowModeSelect.value;
+    ui.headerRow.hidden = ui.headerHint.hidden = settings.windowMode !== "sidebar";
     settings.customCommands = ui.customCommandsInput.value.trim();
     await saveSettings();
 
@@ -1156,7 +1203,7 @@
     let shortcut = "";
     try {
       const commands = await browser.commands.getAll();
-      const command = commands.find((entry) => entry.name === "_execute_sidebar_action");
+      const command = commands.find((entry) => entry.name === "toggle-claude") || commands.find((entry) => entry.name === "_execute_sidebar_action");
       shortcut = command && command.shortcut ? command.shortcut : "";
     } catch (_) {
       shortcut = "";
@@ -1180,7 +1227,7 @@
     clearConfirmTimer = null;
     state.conversations = [];
     state.currentId = null;
-    await saveConversations();
+    await saveConversations({ replace: true });
     ui.clearHistoryButton.textContent = t("settings.cleared");
     setTimeout(() => (ui.clearHistoryButton.textContent = t("settings.clear")), 1500);
     renderConversation();
@@ -1411,7 +1458,17 @@
   async function addScreenshot() {
     try {
       const tab = state.activeTab;
-      const dataUrl = await browser.tabs.captureVisibleTab(tab ? tab.windowId : undefined, { format: "jpeg", quality: 85 });
+      const hideFloat = FLOAT && tab;
+      if (hideFloat) {
+        await browser.tabs.sendMessage(tab.id, { type: "claude-float-visibility", visible: false }).catch(() => {});
+        await new Promise((resolve) => setTimeout(resolve, 80));
+      }
+      let dataUrl;
+      try {
+        dataUrl = await browser.tabs.captureVisibleTab(tab ? tab.windowId : undefined, { format: "jpeg", quality: 85 });
+      } finally {
+        if (hideFloat) browser.tabs.sendMessage(tab.id, { type: "claude-float-visibility", visible: true }).catch(() => {});
+      }
       const title = tab && tab.title ? tab.title.slice(0, 40) : "";
       if (!(await addImage(dataUrl, title ? t("chip.screenshotOf", { title }) : t("chip.screenshot")))) flash(t("flash.screenshotFailed"));
     } catch (_) {
@@ -1571,12 +1628,17 @@
     });
     for (const control of [
       ui.apiKeyInput, ui.defaultModelSelect, ui.defaultEffortSelect, ui.languageSelect, ui.appearanceSelect,
-      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.regionSelect, ui.confirmChangesCheckbox, ui.customCommandsInput
+      ui.backgroundModeSelect, ui.backgroundColorInput, ui.webSearchCheckbox, ui.regionSelect, ui.windowModeSelect, ui.confirmChangesCheckbox, ui.customCommandsInput
     ]) {
       control.addEventListener("change", saveSettingsFromForm);
     }
     ui.clearHistoryButton.addEventListener("click", handleClearHistory);
     ui.updateButton.addEventListener("click", checkForUpdate);
+    ui.collapseButton.hidden = !FLOAT;
+    ui.collapseButton.addEventListener("click", async () => {
+      const { floatState } = await browser.storage.local.get("floatState");
+      browser.storage.local.set({ floatState: Object.assign({}, floatState, { open: false }) });
+    });
     ui.shortcutButton.addEventListener("click", () => {
       if (browser.commands && typeof browser.commands.openShortcutSettings === "function") browser.commands.openShortcutSettings();
     });
@@ -1636,7 +1698,9 @@
     );
 
     browser.storage.onChanged.addListener((changes, area) => {
-      if (area === "local" && changes.pendingAction && changes.pendingAction.newValue) handlePendingAction(changes.pendingAction.newValue);
+      if (area !== "local") return;
+      if (changes.pendingAction && changes.pendingAction.newValue) handlePendingAction(changes.pendingAction.newValue);
+      syncFromStorage(changes);
     });
   }
 

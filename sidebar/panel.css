@@ -315,3 +315,9 @@ input[type="color"] { width: 28px; height: 28px; padding: 0; border: 0; border-r
 .row-controls select { max-width: none; }
 .row-value { color: var(--text-muted); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
 .group .danger-button { padding: 7px 14px; align-self: flex-start; margin: 4px 0; }
+
+/* 0.6: schwebendes Glas-Fenster (iframe über der Webseite) */
+:root.is-float, :root.is-float body { background: transparent; }
+:root.is-float body { background: color-mix(in srgb, var(--background) 66%, transparent); }
+:root.is-float .topbar { padding-top: 0; }
+:root.is-float .tab-picker, :root.is-float .suggest-box { background: color-mix(in srgb, var(--popover) 94%, transparent); }
