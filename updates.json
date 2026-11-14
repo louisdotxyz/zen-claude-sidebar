@@ -17,6 +17,10 @@
         {
           "version": "0.5.2",
           "update_link": "https://github.com/louisdotxyz/zen-claude-sidebar/releases/download/v0.5.2/claude-sidebar-0.5.2.xpi"
+        },
+        {
+          "version": "0.6.0",
+          "update_link": "https://github.com/louisdotxyz/zen-claude-sidebar/releases/download/v0.6.0/claude-sidebar-0.6.0.xpi"
         }
       ]
     }
