@@ -190,6 +190,7 @@
         hidden: Boolean(tab.hidden),
         groupId: ungroupedId(tab.groupId)
       };
+      if (tab.highlighted && !tab.active) item.selected = true;
       if (typeof tab.lastAccessed === "number") item.daysSinceUsed = Math.max(0, Math.floor((Date.now() - tab.lastAccessed) / 86400000));
       if (/^https?:/i.test(tab.url || "")) {
         if (firstTabByUrl.has(tab.url)) item.duplicateOf = firstTabByUrl.get(tab.url);

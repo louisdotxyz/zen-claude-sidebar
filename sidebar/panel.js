@@ -84,6 +84,7 @@
     currentEffort: "",
     effortUnsupported: new Set(), // Modelle, die keine Stufen annehmen
     includePage: true,
+    selectedTabs: [], // Mehrfachauswahl in Zen (Cmd-/Shift-Klick), nur wenn mindestens 2
     activeTab: null,
     extraTabs: new Map(), // tabId -> title
     attachments: [], // { kind: "image", data, thumb, name } | { kind: "pdf", data, name, size } | { kind: "text", text, name, size }
@@ -471,9 +472,18 @@
 
   /* ---------- Kontext: aktuelle Seite, weitere Tabs, Bilder, Auswahl ---------- */
 
+  const MAX_SELECTED_TABS = 12;
+
   async function refreshActiveTab() {
     const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
     state.activeTab = tab || null;
+    let highlighted = [];
+    try {
+      highlighted = await browser.tabs.query({ highlighted: true, currentWindow: true });
+    } catch (_) {
+      highlighted = [];
+    }
+    state.selectedTabs = highlighted.length >= 2 ? highlighted.slice(0, MAX_SELECTED_TABS) : [];
     renderContextChips();
   }
 
@@ -521,10 +531,17 @@
   function renderContextChips() {
     const tab = state.activeTab;
     const readable = tab && TabTools.isReadableUrl(tab.url);
+    if (state.selectedTabs.length) {
+      ui.pageChip.setAttribute("aria-pressed", String(state.includePage));
+      ui.pageChip.disabled = false;
+      ui.pageChipLabel.textContent = t("chip.selectedTabs", { count: state.selectedTabs.length });
+      ui.pageChip.title = state.selectedTabs.map((entry) => `• ${entry.title || entry.url}`).join("\n");
+    } else {
     ui.pageChip.setAttribute("aria-pressed", String(state.includePage && Boolean(readable)));
     ui.pageChip.disabled = !readable;
     ui.pageChipLabel.textContent = readable ? tab.title || t("chip.thisPage") : t("chip.unreadable");
     ui.pageChip.title = readable ? t("chip.pageTitle", { url: tab.url }) : t("chip.unreadableTitle");
+    }
 
     const chips = [...state.extraTabs.entries()].map(([tabId, title]) =>
       buildChip("chip chip-tab", t("chip.remove"), [chipLabel(title)], () => {
@@ -611,7 +628,12 @@
 
     const activeReadable = state.activeTab && TabTools.isReadableUrl(state.activeTab.url);
     if (forcePage && !activeReadable) throw new Error(t("error.pageUnreadable"));
-    if (!noPage && activeReadable && (state.includePage || forcePage) && !alreadySent.has(state.activeTab.url)) {
+    if (!noPage && !forcePage && state.selectedTabs.length && state.includePage) {
+      /* Mehrere Tabs ausgewählt: alle lesen (z. B. zum Vergleichen) */
+      for (const tab of state.selectedTabs) {
+        if (TabTools.isReadableUrl(tab.url) && !alreadySent.has(tab.url)) tabsToRead.push(tab);
+      }
+    } else if (!noPage && activeReadable && (state.includePage || forcePage) && !alreadySent.has(state.activeTab.url)) {
       tabsToRead.push(state.activeTab);
     }
     for (const tabId of state.extraTabs.keys()) {
@@ -623,7 +645,14 @@
       }
     }
     const pages = [];
-    for (const tab of tabsToRead) pages.push(await TabTools.extractTab(tab));
+    const multiple = tabsToRead.length > 1;
+    for (const tab of tabsToRead) {
+      try {
+        pages.push(await TabTools.extractTab(tab));
+      } catch (error) {
+        if (!multiple) throw error; // bei mehreren Tabs: nicht lesbare einfach weglassen
+      }
+    }
     return pages;
   }
 
@@ -815,7 +844,11 @@
     }
     const images = attachments.filter((attachment) => attachment.kind === "image");
     const files = attachments.filter((attachment) => attachment.kind !== "image");
-    const contexts = pages.map((page) => ({ title: page.title, url: page.url }));
+    /* Ausgewählte Tabs gelten für alles ausser Befehlen, die ausdrücklich die aktuelle Seite meinen */
+    const selectedTabs = state.selectedTabs.length && state.includePage && !options.forcePage && !contextError ? state.selectedTabs.slice() : [];
+    const contexts = selectedTabs.length
+      ? [{ title: t("msg.selectedTabs", { count: selectedTabs.length }) }]
+      : pages.map((page) => ({ title: page.title, url: page.url }));
     if (selection) contexts.push({ title: t("msg.selection") });
     /* display: kurzer Text für die Sprechblase (z. B. „/vergleichen“), text geht an Claude */
     const userMessage = { role: "user", text: options.display || text, contexts };
@@ -854,7 +887,10 @@
 
     const snapshotLength = conversation.apiMessages.length;
     const selectionBlock = selection ? `<selected_text>\n${selection}\n</selected_text>` : "";
-    const apiText = [documents, selectionBlock, text].filter(Boolean).join("\n\n");
+    const selectedTabsBlock = selectedTabs.length
+      ? `<selected_tabs>\nThe user has selected these ${selectedTabs.length} tabs in the browser. The request applies to exactly these tabs unless the user says otherwise.\n${selectedTabs.map((tab) => `- tabId ${tab.id}: ${(tab.title || "").slice(0, 120)} — ${BrowserTools.shortUrl(tab.url)}`).join("\n")}\n</selected_tabs>`
+      : "";
+    const apiText = [selectedTabsBlock, documents, selectionBlock, text].filter(Boolean).join("\n\n");
     const attachmentBlocks = attachments.map((attachment) => {
       if (attachment.kind === "image") return { type: "image", source: { type: "base64", media_type: "image/jpeg", data: attachment.data } };
       if (attachment.kind === "pdf") return { type: "document", source: { type: "base64", media_type: "application/pdf", data: attachment.data }, title: attachment.name.slice(0, 200) };
@@ -1560,6 +1596,7 @@
       if (state.extraTabs.delete(tabId)) renderContextChips();
     });
     browser.windows.onFocusChanged.addListener(refreshActiveTab);
+    if (browser.tabs.onHighlighted) browser.tabs.onHighlighted.addListener(refreshActiveTab);
     if (browser.theme && browser.theme.onUpdated) browser.theme.onUpdated.addListener(applyAppearance);
     if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyAppearance);
 

@@ -20,6 +20,7 @@
       "empty.hintImage": "Bild oder Datei reinziehen",
 
       "chip.thisPage": "Diese Seite",
+      "chip.selectedTabs": "{count} ausgewählte Tabs",
       "chip.unreadable": "Diese Seite (nicht lesbar)",
       "chip.pageTitle": "Aktuelle Seite mitschicken: {url}",
       "chip.unreadableTitle": "Interne Seiten kann die Extension nicht lesen",
@@ -47,6 +48,7 @@
       "msg.copied": "Kopiert",
       "msg.sources": "Quellen",
       "msg.selection": "Auswahl",
+      "msg.selectedTabs": "{count} ausgewählten Tabs",
 
       "confirm.title": "Claude möchte deine Tabs ändern:",
       "confirm.run": "Ausführen",
@@ -267,6 +269,7 @@
       "empty.hintImage": "drop an image or file",
 
       "chip.thisPage": "This page",
+      "chip.selectedTabs": "{count} selected tabs",
       "chip.unreadable": "This page (not readable)",
       "chip.pageTitle": "Send the current page along: {url}",
       "chip.unreadableTitle": "Extensions cannot read internal pages",
@@ -294,6 +297,7 @@
       "msg.copied": "Copied",
       "msg.sources": "Sources",
       "msg.selection": "Selection",
+      "msg.selectedTabs": "{count} selected tabs",
 
       "confirm.title": "Claude wants to change your tabs:",
       "confirm.run": "Run",

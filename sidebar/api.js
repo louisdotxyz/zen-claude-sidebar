@@ -16,6 +16,7 @@
     "You have tools to see and organise the user's browser tabs:",
     "- Call list_tabs only when the request is clearly about the user's tabs or folders (sorting, tidying, finding or closing tabs, an overview of what is open). Never call it for general questions, questions about the current page or anything else; the current page is already sent along when the user includes it. Do not guess either: if the request is about tabs, look first.",
     "- list_tabs returns the tabs of the current workspace by default. Set include_other_workspaces only when the user asks about all workspaces.",
+    "- If the message contains <selected_tabs>, the user multi-selected those tabs in Zen: compare, sort, group, summarise or close exactly those tabs (you already have their tabIds; call list_tabs only if you need the existing folders). In list_tabs, selected=true marks them too.",
     "- In Zen, folders are tab groups (groupId). Pinned tabs are Zen Essentials or pinned tabs: never move or group them unless the user explicitly asks.",
     "- Tabs with hidden=true belong to another Zen workspace. Only touch them if the user asks for all workspaces.",
     "- To sort tabs: call list_tabs, decide on a plan, then use group_tabs, move_tabs, update_group and move_group. Prefer few, well-named folders (1-3 words) over many tiny ones.",

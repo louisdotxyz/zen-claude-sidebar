@@ -61,6 +61,8 @@
       const isListing = Boolean(page.shop && page.shop.cards && page.shop.cards.length);
       let perTab = Math.min(MAX_CHARS_PER_TAB, Math.max(2000, Math.floor(budget / (pages.length - index))));
       if (isListing) perTab = Math.min(perTab, MAX_CHARS_WITH_LISTING);
+      /* Produktseite mit strukturierten Daten: Preis & Co. stehen schon in shop_data */
+      else if (page.shop && page.shop.products && page.shop.products.length && pages.length > 1) perTab = Math.min(perTab, 8000);
       let text = page.text || "";
       let truncated = false;
       if (text.length > perTab) {
