@@ -15,7 +15,9 @@ browser.runtime.onUpdateAvailable.addListener(async (details) => {
   if (!busySince || Date.now() - busySince > BUSY_TIMEOUT_MS) browser.runtime.reload();
 });
 
+/* Chrome kennt requestUpdateCheck, Firefox/Zen nicht: dort prüft Firefox selbst (etwa täglich) über update_url. */
 async function checkForUpdate() {
+  if (typeof browser.runtime.requestUpdateCheck !== "function") return;
   try {
     await browser.runtime.requestUpdateCheck();
   } catch (_) {

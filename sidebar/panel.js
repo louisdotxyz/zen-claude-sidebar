@@ -997,16 +997,41 @@
 
   /* ---------- Updates ---------- */
 
+  /* Firefox/Zen kennen runtime.requestUpdateCheck nicht: selbst in der Update-Liste nachsehen
+     und die neue Version zum Installieren öffnen (Firefox fragt einmal nach). */
+  const UPDATES_URL = "https://raw.githubusercontent.com/louisdotxyz/zen-claude-sidebar/main/updates.json";
+  const compareVersions = (a, b) => {
+    const left = String(a).split(".").map(Number);
+    const right = String(b).split(".").map(Number);
+    for (let index = 0; index < Math.max(left.length, right.length); index++) {
+      const difference = (left[index] || 0) - (right[index] || 0);
+      if (difference) return difference;
+    }
+    return 0;
+  };
+  let pendingUpdateLink = "";
+
   async function checkForUpdate() {
+    if (pendingUpdateLink) {
+      browser.tabs.create({ url: pendingUpdateLink });
+      return;
+    }
     ui.updateButton.disabled = true;
     ui.updateStatus.textContent = t("update.checking");
     try {
-      const result = await browser.runtime.requestUpdateCheck();
-      const status = Array.isArray(result) ? result[0] : result && result.status;
-      const version = Array.isArray(result) ? result[1] && result[1].version : result && result.version;
-      if (status === "update_available") ui.updateStatus.textContent = t("update.available", { version: version || "" });
-      else if (status === "throttled") ui.updateStatus.textContent = t("update.throttled");
-      else ui.updateStatus.textContent = t("update.current");
+      const response = await fetch(`${UPDATES_URL}?t=${Date.now()}`, { cache: "no-store", credentials: "omit" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+      const entries = (((data.addons || {})["claude-sidebar@louis.local"] || {}).updates || []).filter((entry) => entry.version && entry.update_link);
+      const newest = entries.sort((a, b) => compareVersions(b.version, a.version))[0];
+      const current = browser.runtime.getManifest().version;
+      if (newest && compareVersions(newest.version, current) > 0) {
+        pendingUpdateLink = newest.update_link;
+        ui.updateStatus.textContent = t("update.available", { version: newest.version });
+        ui.updateButton.textContent = t("update.install");
+      } else {
+        ui.updateStatus.textContent = t("update.current");
+      }
     } catch (error) {
       ui.updateStatus.textContent = t("update.failed", { error: error.message || error });
     } finally {
