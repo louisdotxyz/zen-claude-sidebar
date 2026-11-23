@@ -259,7 +259,17 @@
     const tabs = await requireTabs(input.tabIds);
     const options = { tabIds: tabs.map((tab) => tab.id) };
     if (Number.isInteger(input.groupId)) options.groupId = input.groupId;
-    const groupId = await browser.tabs.group(options);
+    let groupId;
+    try {
+      groupId = await browser.tabs.group(options);
+    } catch (error) {
+      /* Zen-Ordner liegen oben bei den angepinnten Tabs: lose Tabs dann zuerst anpinnen und nochmals versuchen */
+      if (options.groupId === undefined) throw error;
+      const members = await browser.tabs.query({ groupId: options.groupId });
+      if (!members.some((tab) => tab.pinned)) throw error;
+      for (const tab of tabs) if (!tab.pinned) await browser.tabs.update(tab.id, { pinned: true });
+      groupId = await browser.tabs.group(options);
+    }
     const update = {};
     if (input.title) update.title = String(input.title).slice(0, 60);
     if (GROUP_COLORS.includes(input.color)) update.color = input.color;

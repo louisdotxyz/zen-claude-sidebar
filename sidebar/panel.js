@@ -130,7 +130,8 @@
     if (stored.usageStats && typeof stored.usageStats === "object") state.usageStats = Object.assign({ total: {}, months: {} }, stored.usageStats);
     state.settings = Object.assign(state.settings, stored.settings || {});
     state.conversations = (Array.isArray(stored.conversations) ? stored.conversations : []).map(migrateConversation);
-    state.currentId = stored.currentId && findConversation(stored.currentId) ? stored.currentId : null;
+    /* Beim Öffnen immer mit einem neuen Chat starten; alte Chats im Verlauf */
+    state.currentId = null;
     const current = currentConversation();
     state.currentModel = (current && current.model) || state.settings.defaultModel;
     state.currentEffort = state.settings.effort || "";
@@ -328,6 +329,14 @@
         context.textContent = t("msg.with", { list: message.contexts.map((item) => item.title).join(", ") });
         wrapper.appendChild(context);
       }
+      const userActions = document.createElement("div");
+      userActions.className = "message-actions user-actions";
+      const userCopy = document.createElement("button");
+      userCopy.className = "text-button";
+      userCopy.textContent = t("msg.copy");
+      userCopy.addEventListener("click", () => copyText(message.text, userCopy));
+      userActions.appendChild(userCopy);
+      wrapper.appendChild(userActions);
       return wrapper;
     }
     const body = document.createElement("div");
@@ -697,6 +706,9 @@
     try {
       return await ClaudeApi.streamMessage(Object.assign({}, parameters, { effort }));
     } catch (error) {
+      if (error.status === 400 && /thinking/i.test(error.detail || error.message || "") && !parameters.dropAllThinking) {
+        return callApi(Object.assign({}, parameters, { dropAllThinking: true }));
+      }
       if (!effort || error.status !== 400 || !/effort|output_config/i.test(error.detail || error.message || "")) throw error;
       state.effortUnsupported.add(state.currentModel);
       flash(t("flash.effortUnsupported"));
@@ -734,6 +746,7 @@
   async function runAgent(conversation, assistantMessage, render, usage) {
     const parts = assistantMessage.parts;
     const sources = new Map();
+    const system = buildSystemPrompt();
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       let textPart = null;
       const result = await callApi({
@@ -741,7 +754,7 @@
         model: state.currentModel,
         messages: conversation.apiMessages,
         tools: buildTools(),
-        system: buildSystemPrompt(),
+        system,
         signal: state.abortController.signal,
         onText: (delta) => {
           if (!textPart) {
@@ -867,10 +880,14 @@
     conversation.updatedAt = Date.now();
 
     ui.emptyState.hidden = true;
-    ui.messageList.appendChild(buildMessageElement(userMessage));
+    ui.messageList.querySelectorAll(".message-assistant").forEach((element) => (element.style.minHeight = ""));
+    const userElement = buildMessageElement(userMessage);
+    ui.messageList.appendChild(userElement);
     const assistantElement = buildMessageElement(assistantMessage);
     ui.messageList.appendChild(assistantElement);
-    scrollToBottom(true);
+    /* Platz schaffen, damit die eigene Nachricht oben stehen kann; danach bleibt die Ansicht ruhig */
+    assistantElement.style.minHeight = `${Math.max(0, ui.chatView.clientHeight - userElement.offsetHeight - 32)}px`;
+    ui.chatView.scrollTop += userElement.getBoundingClientRect().top - ui.chatView.getBoundingClientRect().top - 12;
 
     if (contextError) {
       delete assistantMessage.streaming;
@@ -887,9 +904,7 @@
       renderScheduled = true;
       requestAnimationFrame(() => {
         renderScheduled = false;
-        const stickToBottom = isNearBottom();
         updateAssistantElement(assistantElement, assistantMessage);
-        if (stickToBottom) scrollToBottom(true);
       });
     };
 
@@ -935,7 +950,6 @@
       await recordUsage(conversation, usage);
       renderUsageLabel();
       updateAssistantElement(assistantElement, assistantMessage);
-      scrollToBottom(false);
       await saveConversations();
       setBusy(false);
     }

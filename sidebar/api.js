@@ -173,14 +173,25 @@
   }
 
   /* Entfernt kaputte Thinking-Blöcke, z. B. aus älteren gespeicherten Chats. */
-  function sanitizeMessages(messages) {
+  const isThinking = (block) => block && (block.type === "thinking" || block.type === "redacted_thinking");
+  const isToolResultTurn = (message) => message.role === "user" && Array.isArray(message.content) && message.content.length > 0 && message.content.every((block) => block.type === "tool_result");
+
+  /* Thinking-Blöcke nur in der laufenden Runde mitschicken (nach der letzten echten Nutzer-Nachricht).
+     Ältere sind an den damaligen System-Prompt gebunden; nach einer Änderung (Datum, Sprache, Region) lehnt die API sie ab. */
+  function sanitizeMessages(messages, { dropAllThinking = false } = {}) {
+    const list = messages || [];
+    let turnStart = 0;
+    list.forEach((message, index) => {
+      if (message.role === "user" && !isToolResultTurn(message)) turnStart = index;
+    });
     const result = [];
-    for (const message of messages || []) {
+    for (const [index, message] of list.entries()) {
       if (message.role !== "assistant" || !Array.isArray(message.content)) {
         result.push(message);
         continue;
       }
-      const content = message.content.filter((block) => !isBrokenThinking(block));
+      const keepThinking = !dropAllThinking && index > turnStart;
+      const content = message.content.filter((block) => !isBrokenThinking(block) && (keepThinking || !isThinking(block)));
       if (content.length) result.push(Object.assign({}, message, { content }));
     }
     return result;
@@ -231,12 +242,12 @@
     return result;
   }
 
-  async function streamMessage({ apiKey, model, messages, tools, system, effort, maxTokens = 4096, signal, onText, onToolStart }) {
+  async function streamMessage({ apiKey, model, messages, tools, system, effort, maxTokens = 4096, signal, onText, onToolStart, dropAllThinking = false }) {
     const body = {
       model,
       max_tokens: maxTokens,
       system: [{ type: "text", text: system || SYSTEM_PROMPT, cache_control: CACHE }],
-      messages: withCacheMarks(sanitizeMessages(messages)),
+      messages: withCacheMarks(sanitizeMessages(messages, { dropAllThinking })),
       stream: true
     };
     if (tools && tools.length) body.tools = tools;
